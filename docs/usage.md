@@ -59,6 +59,8 @@ PYTHONPATH=python-service/src python-service/.venv/bin/python -m unittest discov
 
 通常テストでは固定バックエンドを使用し、重みをロードしません。PSDはテスト内で生成して検証します。
 
+Javaの追加テストは127.0.0.1の模擬HTTPサービスと一時的なPython子プロセスを起動します。通常テストにAI重みや外部ネットワークは不要ですが、ローカル通信を許可した環境で実行してください。
+
 JavaとPythonをまとめて確認する場合：
 
 ```sh
@@ -122,3 +124,13 @@ HTTPの受付準備ができると、ポート・PID・serviceInstanceIdを含�
 ## 残っている結合と受入
 
 エディタ画面、レイヤー登録、Undo/Redo、PNG/JPEG書き出しを含む一連の受入は担当A側の実装と結合後に行います。実推論の動作確認と、人物・動物・日用品を使った切り抜き品質の受入は別に評価します。
+
+## カバレッジを計測する
+
+```sh
+python3 tools/coverage.py --check
+```
+
+JavaはJaCoCo、Pythonはcoverage.pyで、本体コードの行と分岐を測定します。初回だけSHA-256を固定したJaCoCoを取得するためネットワークが必要です。以後は`.cache/jacoco/`を使用します。レポートはGit対象外の`reports/coverage/`へ生成します。
+
+CIではJava・Pythonそれぞれの行95%以上、分岐85%以上を基準とし、下回ると失敗します。計測対象・残っている未通過箇所・実モデル評価との違いは[カバレッジ報告](coverage.md)を参照してください。

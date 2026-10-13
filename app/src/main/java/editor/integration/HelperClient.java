@@ -88,6 +88,7 @@ public final class HelperClient implements AutoCloseable {
         final List<Point> copy;
         try {copy=List.copyOf(points);UUID.fromString(requestId);}
         catch(RuntimeException e) {return CompletableFuture.failedFuture(invalid("推論入力が不正です"));}
+        if(imageId==null)return CompletableFuture.failedFuture(invalid("画像IDが不正です"));
         RegisteredImage registered=images.get(imageId);
         if(registered==null)return CompletableFuture.failedFuture(new ServiceFailure("IMAGE_NOT_FOUND","画像を登録してください",requestId,404));
         if(!registered.sourceRevision().equals(revision))return CompletableFuture.failedFuture(invalid("画像世代が一致しません"));
@@ -122,8 +123,8 @@ public final class HelperClient implements AutoCloseable {
     }
     public void cancelSegmentation(String imageId) {latest.remove(imageId);}
     public CompletableFuture<Void> releaseImage(String imageId) {
-        images.remove(imageId);latest.remove(imageId);
         try {UUID.fromString(imageId);}catch(RuntimeException e) {return CompletableFuture.failedFuture(invalid("画像IDが不正です"));}
+        images.remove(imageId);latest.remove(imageId);
         return task(()->{exchange("DELETE","/image/"+imageId,null,null,15,65536,204,UUID.randomUUID().toString());return null;});
     }
     public CompletableFuture<PsdImport> importPsd(Path file) {

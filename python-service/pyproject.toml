@@ -11,7 +11,7 @@ dependencies = ["fastapi", "uvicorn", "python-multipart", "pillow", "numpy", "ps
 
 [project.optional-dependencies]
 ai = ["torch", "torchvision", "timm"]
-test = ["httpx"]
+test = ["httpx", "coverage==7.16.2"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
