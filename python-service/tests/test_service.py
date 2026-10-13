@@ -6,6 +6,7 @@ import unittest
 import uuid
 import zipfile
 from io import BytesIO
+from unittest.mock import patch
 
 import numpy as np
 from editor_helper.api import WorkQueue, create_app
@@ -228,6 +229,90 @@ class PsdTests(unittest.TestCase):
             self.assertTrue(manifest["warnings"])
             image = Image.open(BytesIO(archive.read(manifest["assets"][0]["path"])))
             self.assertLessEqual(abs(image.getpixel((1, 1))[3] - 128), 1)
+
+    def test_local_composite_preserves_siblings_and_coordinates(self):
+        psd = PSDImage.new("RGBA", (12, 10))
+        PixelLayer.frompil(Image.new("RGBA", (2, 2), "green"), psd, name="outside")
+        group = Group.new(psd, "isolated")
+        group.blend_mode = BlendMode.NORMAL
+        group.opacity = 128
+        PixelLayer.frompil(Image.new("RGBA", (3, 2), "red"), group, left=4, top=3)
+        with self.archive(psd) as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            nodes = {n["name"]: n for n in manifest["nodes"]}
+            self.assertEqual(nodes["outside"]["importDisposition"], "RASTER")
+            replacement = nodes["isolated"]
+            self.assertEqual(replacement["importDisposition"], "REPLACEMENT_RASTER")
+            self.assertEqual((replacement["x"], replacement["y"]), (4, 3))
+            self.assertEqual(replacement["opacity"], 1)
+            self.assertAlmostEqual(replacement["originalMetadata"]["opacity"], 128 / 255)
+            asset = next(a for a in manifest["assets"] if a["assetId"] == replacement["assetId"])
+            image = Image.open(BytesIO(archive.read(asset["path"])))
+            self.assertEqual(image.size, (3, 2))
+            self.assertLessEqual(abs(image.getpixel((0, 0))[3] - 128), 1)
+
+    def test_nested_scopes_are_merged_and_hidden_group_retains_pixels(self):
+        psd = PSDImage.new("RGBA", (6, 6))
+        outer = Group.new(psd, "outer")
+        outer.blend_mode = BlendMode.NORMAL
+        outer.visible = False
+        inner = Group.new(outer, "inner")
+        inner.blend_mode = BlendMode.NORMAL
+        PixelLayer.frompil(Image.new("RGBA", (2, 2), "red"), inner, name="visible")
+        hidden = PixelLayer.frompil(Image.new("RGBA", (2, 2), "blue"), inner, name="hidden")
+        hidden.visible = False
+        with self.archive(psd) as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            self.assertEqual(len(manifest["assets"]), 1)
+            replacement = manifest["nodes"][0]
+            self.assertFalse(replacement["effectiveVisible"])
+            self.assertTrue(
+                all(n["importDisposition"] == "METADATA_ONLY" for n in manifest["nodes"][1:])
+            )
+            image = Image.open(BytesIO(archive.read(manifest["assets"][0]["path"])))
+            self.assertEqual(image.getpixel((0, 0)), (255, 0, 0, 255))
+
+    def test_backdrop_dependency_ascends_to_isolated_parent(self):
+        for isolated in (False, True):
+            with self.subTest(isolated=isolated):
+                psd = PSDImage.new("RGBA", (4, 4))
+                parent = Group.new(psd, "parent")
+                parent.blend_mode = BlendMode.NORMAL if isolated else BlendMode.PASS_THROUGH
+                child = PixelLayer.frompil(Image.new("RGBA", (2, 2), "red"), parent)
+                child.blend_mode = BlendMode.MULTIPLY
+                PixelLayer.frompil(Image.new("RGBA", (2, 2), "green"), psd, name="outside")
+                with self.archive(psd) as archive:
+                    manifest = json.loads(archive.read("manifest.json"))
+                    replacement = next(
+                        n
+                        for n in manifest["nodes"]
+                        if n["importDisposition"] == "REPLACEMENT_RASTER"
+                    )
+                    self.assertEqual(replacement["name"], "parent" if isolated else "PSD composite")
+                    outside = next(n for n in manifest["nodes"] if n["name"] == "outside")
+                    self.assertEqual(
+                        outside["importDisposition"], "RASTER" if isolated else "METADATA_ONLY"
+                    )
+
+    def test_raw_extraction_failure_recovers_with_warning(self):
+        psd = PSDImage.new("RGBA", (4, 4))
+        layer = PixelLayer.frompil(Image.new("RGBA", (2, 2), "red"), psd)
+        layer.opacity = 128
+        with patch.object(PixelLayer, "topil", return_value=None), self.archive(psd) as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            self.assertEqual(manifest["warnings"][0]["code"], "EXTRACTION_FAILED")
+            self.assertEqual(manifest["nodes"][0]["opacity"], 1)
+            image = Image.open(BytesIO(archive.read(manifest["assets"][0]["path"])))
+            self.assertLessEqual(abs(image.getpixel((0, 0))[3] - 128), 1)
+
+    def test_empty_isolated_group_keeps_metadata_without_asset(self):
+        psd = PSDImage.new("RGBA", (4, 4))
+        group = Group.new(psd, "empty")
+        group.blend_mode = BlendMode.NORMAL
+        with self.archive(psd) as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            self.assertEqual(manifest["assets"], [])
+            self.assertEqual(manifest["nodes"][0]["importDisposition"], "EMPTY_METADATA")
 
 
 if __name__ == "__main__":
