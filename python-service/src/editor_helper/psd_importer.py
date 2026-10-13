@@ -1,4 +1,4 @@
-"""Conservative PSD importer: independent plain raster layers, or explicit document fallback."""
+"""Conservative PSD importer: independent raster layers and bounded group composition."""
 
 import json
 import uuid
@@ -76,20 +76,58 @@ def import_psd(data):
                     unsafe.append(node_id)
 
         walk(psd)
+        by_id = {node["id"]: (node, layer) for node, layer in layers}
+
+        def ancestors(node):
+            while node is not None:
+                yield node
+                node = by_id[node["parentId"]][0] if node["parentId"] else None
+
+        # Only normal, unclipped groups isolate their children from the backdrop.
+        # Pass-through and unknown modes must ascend to an enclosing isolation boundary.
+        scopes = set()
+        for node_id in unsafe:
+            node, layer = by_id[node_id]
+            start = (
+                node
+                if layer.is_group()
+                else (by_id[node["parentId"]][0] if node["parentId"] else None)
+            )
+            scope = None
+            if start is not None:
+                for candidate in ancestors(start):
+                    group = by_id[candidate["id"]][1]
+                    if candidate["blendMode"] == "norm" and not group.clipping:
+                        scope = candidate["id"]
+                        break
+            scopes.add(scope)
+        if not layers:
+            scopes.add(None)
+        if None in scopes:
+            scopes = {None}
+        else:
+            scopes = {
+                scope
+                for scope in scopes
+                if not any(n["id"] in scopes for n in list(ancestors(by_id[scope][0]))[1:])
+            }
         raster_bytes = 0
-        if unsafe or not layers:
-            # Whole-document fallback includes backdrop dependencies. Do not pretend children remain editable.
-            image = psd.composite(force=True)
-            if image is None:
-                raise ValueError("composite unavailable")
-            replacement_id = str(uuid.uuid4())
+
+        def add_asset(node, image):
+            nonlocal raster_bytes
+            if image is None or image.size != (node["width"], node["height"]):
+                raise ValueError("raster unavailable or dimensions mismatch")
+            raster_bytes += image.width * image.height * 4
+            if raster_bytes > MAX_RASTER_BYTES:
+                raise ServiceError("RESOURCE_LIMIT", "展開画像が上限を超えています", 413)
             asset_id = str(uuid.uuid4())
             assets[asset_id] = image.convert("RGBA")
-            for node in nodes:
-                node["importDisposition"] = "METADATA_ONLY"
-            nodes.append(
-                {
-                    "id": replacement_id,
+            node["assetId"] = asset_id
+
+        for scope in sorted(scopes, key=lambda value: value or ""):
+            if scope is None:
+                replacement = {
+                    "id": str(uuid.uuid4()),
                     "parentId": None,
                     "siblingIndex": len(psd),
                     "name": "PSD composite",
@@ -103,51 +141,104 @@ def import_psd(data):
                     "opacity": 1.0,
                     "effectiveOpacity": 1.0,
                     "blendMode": "norm",
-                    "assetId": asset_id,
-                    "importDisposition": "REPLACEMENT_RASTER",
+                    "assetId": None,
                     "originalMetadata": {},
+                    "importDisposition": "REPLACEMENT_RASTER",
+                }
+                for node in nodes:
+                    node["importDisposition"] = "METADATA_ONLY"
+                nodes.append(replacement)
+                if raster_bytes + psd.width * psd.height * 4 > MAX_RASTER_BYTES:
+                    raise ServiceError("RESOURCE_LIMIT", "展開画像が上限を超えています", 413)
+                image = psd.composite(force=True)
+            else:
+                replacement, group = by_id[scope]
+
+                # Ignore visibility outside this scope, but preserve hidden descendants.
+                def visible_within_scope(layer):
+                    while layer is not group:
+                        if not layer.visible:
+                            return False
+                        layer = layer.parent
+                    return True
+
+                # psd-tools computes group bounds through ancestor visibility. Temporarily
+                # expose only this ancestry; descendants keep their original visibility.
+                ancestry = [by_id[n["id"]][1] for n in ancestors(replacement)]
+                visibility = [layer.visible for layer in ancestry]
+                try:
+                    for layer in ancestry:
+                        layer.visible = True
+                    x, y, right, bottom = group.bbox
+                    if right <= x or bottom <= y:
+                        x, y, right, bottom = group.extract_bbox(group, include_invisible=True)
+                    if right <= x or bottom <= y:
+                        replacement["importDisposition"] = "EMPTY_METADATA"
+                        continue
+                    dimensions(right - x, bottom - y)
+                    replacement.update(x=x, y=y, width=right - x, height=bottom - y)
+                    if raster_bytes + (right - x) * (bottom - y) * 4 > MAX_RASTER_BYTES:
+                        raise ServiceError("RESOURCE_LIMIT", "展開画像が上限を超えています", 413)
+                    image = group.composite(
+                        force=True,
+                        viewport=(x, y, right, bottom),
+                        layer_filter=visible_within_scope,
+                    )
+                finally:
+                    for layer, was_visible in zip(ancestry, visibility):
+                        layer.visible = was_visible
+                for node, _ in layers:
+                    if node is not replacement and any(n["id"] == scope for n in ancestors(node)):
+                        node["importDisposition"] = "METADATA_ONLY"
+                replacement.update(
+                    opacity=1.0, blendMode="norm", importDisposition="REPLACEMENT_RASTER"
+                )
+            add_asset(replacement, image)
+            warnings.append(
+                {
+                    "code": "FLATTENED",
+                    "nodeId": replacement["id"],
+                    "sourceKind": "document" if scope is None else replacement["kind"],
+                    "unsupportedFeature": "group composition, mask, effects or non-raster data"
+                    if layers
+                    else "no individual layers",
+                    "message": "文書全体を1枚に合成しました。元レイヤーの個別編集はできません。"
+                    if scope is None
+                    else "このグループを1枚に合成しました。グループ内の個別編集はできません。",
+                    "disposition": "REPLACEMENT_RASTER",
                 }
             )
-            if not layers:
-                warnings.append(
-                    {
-                        "code": "FLATTENED",
-                        "nodeId": replacement_id,
-                        "sourceKind": "document",
-                        "unsupportedFeature": "no individual layers",
-                        "message": "個別レイヤーのないPSDを合成画像として取り込みました。",
-                        "disposition": "REPLACEMENT_RASTER",
-                    }
-                )
-            for node_id in dict.fromkeys(unsafe):
-                node = next(n for n in nodes if n["id"] == node_id)
-                warnings.append(
-                    {
-                        "code": "FLATTENED",
-                        "nodeId": node_id,
-                        "sourceKind": node["kind"],
-                        "unsupportedFeature": "group composition, mask, effects or non-raster data",
-                        "message": "未対応要素の影響を含めて文書全体を1枚に合成しました。元レイヤーの個別編集はできません。",
-                        "disposition": "REPLACEMENT_RASTER",
-                    }
-                )
-        else:
-            for node, layer in layers:
-                if layer.is_group() or layer.width == 0 or layer.height == 0:
-                    continue
-                dimensions(layer.width, layer.height)
-                raster_bytes += layer.width * layer.height * 4
-                if raster_bytes > MAX_RASTER_BYTES:
-                    raise ServiceError("RESOURCE_LIMIT", "展開画像が上限を超えています", 413)
+        for node, layer in layers:
+            if node["importDisposition"] in ("METADATA_ONLY", "REPLACEMENT_RASTER"):
+                continue
+            if layer.is_group() or layer.width == 0 or layer.height == 0:
+                continue
+            if raster_bytes + layer.width * layer.height * 4 > MAX_RASTER_BYTES:
+                raise ServiceError("RESOURCE_LIMIT", "展開画像が上限を超えています", 413)
+            try:
                 image = layer.topil()
                 if image is None:
                     raise ValueError("raster unavailable")
-                image = image.convert("RGBA")
-                if image.size != (layer.width, layer.height):
-                    raise ValueError("raster dimensions mismatch")
-                asset_id = str(uuid.uuid4())
-                assets[asset_id] = image
-                node.update(assetId=asset_id, importDisposition="RASTER")
+                add_asset(node, image)
+                node["importDisposition"] = "RASTER"
+            except ServiceError:
+                raise
+            except Exception:
+                # The layer is a normal independent raster at this point. Composite
+                # can recover masks/channel decoding without including siblings.
+                image = layer.composite(force=True, layer_filter=lambda _: True)
+                add_asset(node, image)
+                node.update(opacity=1.0, importDisposition="REPLACEMENT_RASTER")
+                warnings.append(
+                    {
+                        "code": "EXTRACTION_FAILED",
+                        "nodeId": node["id"],
+                        "sourceKind": node["kind"],
+                        "unsupportedFeature": "raw pixel extraction",
+                        "message": "画素抽出に失敗したため、このレイヤーを合成画像に置き換えました。",
+                        "disposition": "REPLACEMENT_RASTER",
+                    }
+                )
         if sum(im.width * im.height * 4 for im in assets.values()) > MAX_RASTER_BYTES:
             raise ServiceError("RESOURCE_LIMIT", "展開画像が上限を超えています", 413)
         manifest = {

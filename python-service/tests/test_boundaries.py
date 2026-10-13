@@ -369,6 +369,7 @@ class PsdBoundaryTests(unittest.TestCase):
         with (
             patch("psd_tools.PSDImage.open", return_value=psd),
             patch.object(PixelLayer, "topil", return_value=None),
+            patch.object(PixelLayer, "composite", return_value=None),
         ):
             with self.assertRaises(ServiceError) as cm:
                 import_psd(b"8BPS\x00\x01")
