@@ -14,3 +14,9 @@ Java部分はJDK 17の標準APIで構成しています。Pythonの正確な依�
 | NumPy | https://github.com/numpy/numpy | BSD-3-Clause等の複合表記。distributionのライセンス一式を参照 |
 
 各ライブラリは仮想環境へインストールします。仮想環境・重みを含む配布物を作る際は、間接依存を含めてインストール済みdistributionのLICENSE・NOTICEを同梱してください。この一覧だけで配布時のライセンス文書の同梱を代替するものではありません。
+
+## 評価用素材と間接依存
+
+評価用写真と派生した候補画像の出典・利用条件は[評価記録](docs/validation/README.md)を参照してください。原画像のURLとSHA-256は`tools/validation-images.json`に記録しています。通常テストやサービスの実行に評価用写真は不要です。
+
+完全ロックのhuggingface_hub 2.2.0が要求するHTTPX2 / HTTPCore2も2.13.1に固定しています。[Pydanticの上流](https://github.com/pydantic/httpx2)と各distributionのライセンスを、配布時の間接依存一覧へ含めてください。

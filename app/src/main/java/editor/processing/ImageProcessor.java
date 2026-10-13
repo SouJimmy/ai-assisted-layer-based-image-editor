@@ -353,31 +353,37 @@ public final class ImageProcessor {
         int[] cachedRowIndices = new int[kernel.length];
         Arrays.fill(cachedRowIndices, -1);
         BufferedImage result = newArgbImage(w, h);
+        double[] accumulated = new double[w * 4];
+        int[] line = new int[w];
         for (int y = 0; y < h; y++) {
             context.check();
             for (int ky = -radius; ky <= radius; ky++) {
                 int iy = Math.max(0, Math.min(h - 1, y + ky)), slot = iy % horizontalRows.length;
                 if (cachedRowIndices[slot] != iy) {
-                    horizontalRows[slot] = horizontal(source, iy, kernel, radius);
+                    if (horizontalRows[slot] == null) horizontalRows[slot] = new double[w * 4];
+                    horizontal(source, iy, kernel, radius, horizontalRows[slot]);
                     cachedRowIndices[slot] = iy;
                 }
             }
-            int[] line = new int[w];
-            for (int x = 0; x < w; x++) {
-                int pixel = 0, alpha = 255;
-                for (int c = 0; c < 4; c++) {
-                    double v = 0;
-                    for (int ky = -radius; ky <= radius; ky++) {
-                        int iy = Math.max(0, Math.min(h - 1, y + ky));
-                        v +=
-                                horizontalRows[iy % horizontalRows.length][x * 4 + c]
-                                        * kernel[ky + radius];
-                    }
-                    int channel = Math.min(alpha, roundToByte(v));
-                    if (c == 0) alpha = channel;
-                    pixel |= channel << (24 - c * 8);
+            Arrays.fill(accumulated, 0);
+            // Traverse contiguous channels once per kernel row; avoid row lookups and
+            // boundary calculations in the per-pixel/channel inner loop.
+            for (int ky = -radius; ky <= radius; ky++) {
+                int iy = Math.max(0, Math.min(h - 1, y + ky));
+                double[] row = horizontalRows[iy % horizontalRows.length];
+                double weight = kernel[ky + radius];
+                for (int i = 0; i < accumulated.length; i++) {
+                    accumulated[i] += row[i] * weight;
                 }
-                line[x] = pixel;
+            }
+            for (int x = 0; x < w; x++) {
+                int offset = x * 4;
+                int alpha = roundToByte(accumulated[offset]);
+                line[x] =
+                        (alpha << 24)
+                                | (Math.min(alpha, roundToByte(accumulated[offset + 1])) << 16)
+                                | (Math.min(alpha, roundToByte(accumulated[offset + 2])) << 8)
+                                | Math.min(alpha, roundToByte(accumulated[offset + 3]));
             }
             result.getRaster().setDataElements(0, y, w, 1, line);
             progress.send((y + 1.0) / h);
@@ -385,17 +391,26 @@ public final class ImageProcessor {
         return result;
     }
 
-    private double[] horizontal(BufferedImage source, int y, double[] kernel, int radius) {
+    private void horizontal(
+            BufferedImage source, int y, double[] kernel, int radius, double[] result) {
         int w = source.getWidth();
         int[] pixels = (int[]) source.getRaster().getDataElements(0, y, w, 1, null);
-        double[] result = new double[w * 4];
-        for (int x = 0; x < w; x++)
+        for (int x = 0; x < w; x++) {
+            double alpha = 0, red = 0, green = 0, blue = 0;
             for (int k = -radius; k <= radius; k++) {
                 int pixel = pixels[Math.max(0, Math.min(w - 1, x + k))];
-                for (int c = 0; c < 4; c++)
-                    result[x * 4 + c] += ((pixel >>> (24 - c * 8)) & 255) * kernel[k + radius];
+                double weight = kernel[k + radius];
+                alpha += (pixel >>> 24) * weight;
+                red += ((pixel >>> 16) & 255) * weight;
+                green += ((pixel >>> 8) & 255) * weight;
+                blue += (pixel & 255) * weight;
             }
-        return result;
+            int offset = x * 4;
+            result[offset] = alpha;
+            result[offset + 1] = red;
+            result[offset + 2] = green;
+            result[offset + 3] = blue;
+        }
     }
 
     private static int roundToByte(double v) {

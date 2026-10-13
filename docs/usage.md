@@ -146,3 +146,7 @@ python3 tools/format.py --check
 ```
 
 JavaはGoogle Java Format、PythonはRuffで統一します。Javaの整形ツールは初回に取得し、`tools/java-format.json`のSHA-256で検証してキャッシュします。CIでも書式と未使用import・変数を確認します。
+
+## 性能・品質・環境再現を評価する
+
+[担当Bの評価記録](validation/README.md)に、計測条件、実写真・PSDの確認結果、再現手順を記載しています。性能計測は通常テストとは別に実行し、時間の変動をCIの成否には使いません。

@@ -29,6 +29,7 @@ java -Djava.awt.headless=true -cp app/build/classes editor.cli.Main input.png gr
 | [実装状況](docs/implementation.md) | 実装済み範囲、設計との差分、結合待ちの項目 |
 | [担当Bの完了状況](docs/b-completion-audit.md) | 未実装・合意待ち・品質や性能の評価待ち |
 | [コードの可読性とテストの確認](docs/code-review.md) | 読みやすさの改善、重複テストの整理、コードの案内 |
+| [性能・品質・環境再現の評価](docs/validation/README.md) | 2K・4K、実写真、PSD9ケース、300回反復、クリーン環境の結果 |
 | [カバレッジ報告](docs/coverage.md) | 行・分岐カバレッジの改善結果と再現手順 |
 | [外部ライブラリとモデル](THIRD_PARTY.md) | 依存とライセンス、モデル取得元 |
 | [元資料一覧](docs/references/README.md) | 要求・要件・概要設計・技術検証・分担計画のPDF |
