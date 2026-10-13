@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "editor-helper"
+version = "0.1.0"
+description = "Local AI segmentation and PSD import service"
+requires-python = ">=3.12,<3.13"
+dependencies = ["fastapi", "uvicorn", "python-multipart", "pillow", "numpy", "psd-tools"]
+
+[project.optional-dependencies]
+ai = ["torch", "torchvision", "timm"]
+test = ["httpx"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
