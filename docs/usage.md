@@ -134,3 +134,15 @@ python3 tools/coverage.py --check
 JavaはJaCoCo、Pythonはcoverage.pyで、本体コードの行と分岐を測定します。初回だけSHA-256を固定したJaCoCoを取得するためネットワークが必要です。以後は`.cache/jacoco/`を使用します。レポートはGit対象外の`reports/coverage/`へ生成します。
 
 CIではJava・Pythonそれぞれの行95%以上、分岐85%以上を基準とし、下回ると失敗します。計測対象・残っている未通過箇所・実モデル評価との違いは[カバレッジ報告](coverage.md)を参照してください。
+
+## コードの書式を揃える
+
+開発用依存を追加します。実推論用依存は必要に応じて上記の完全なロックから導入してください。
+
+```sh
+python-service/.venv/bin/python -m pip install -r python-service/requirements-dev.lock
+python3 tools/format.py
+python3 tools/format.py --check
+```
+
+JavaはGoogle Java Format、PythonはRuffで統一します。Javaの整形ツールは初回に取得し、`tools/java-format.json`のSHA-256で検証してキャッシュします。CIでも書式と未使用import・変数を確認します。
