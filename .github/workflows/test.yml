@@ -1,0 +1,21 @@
+name: B processing and service tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: python-service/requirements-core.lock
+      - run: python -m venv python-service/.venv
+      - run: python-service/.venv/bin/python -m pip install -r python-service/requirements-core.lock
+      - run: python tools/test.py
