@@ -17,6 +17,7 @@ public final class LocalServiceManager implements AutoCloseable {
     public synchronized HelperClient start(Path python,Path workingDirectory,Path manifest) throws IOException {
         if(disposed)throw new IOException("Service manager has been disposed");
         if(process!=null && process.isAlive())return client;
+        if(process!=null || client!=null)close();
         byte[] secret=new byte[32];new SecureRandom().nextBytes(secret);
         String token=Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
         List<String> args=new ArrayList<>(List.of(python.toAbsolutePath().toString(),"-m","editor_helper","--host","127.0.0.1","--port","0"));

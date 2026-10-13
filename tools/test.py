@@ -14,5 +14,5 @@ if '--integration' in sys.argv:
     subprocess.run([str(PYTHON),'-c',
         "from psd_tools import PSDImage; from psd_tools.api.layers import PixelLayer; from PIL import Image; "
         "p=PSDImage.new('RGBA',(32,32)); PixelLayer.frompil(Image.new('RGBA',(16,16),(255,0,0,128)),p,name='red',left=3,top=4); p.save('tmp/smoke.psd')"],cwd=ROOT,check=True)
-    subprocess.run(['java','-Djava.awt.headless=true','-cp',str(ROOT/'app/build/classes'),'editor.IntegrationSmoke',
+    subprocess.run(['java','-Djava.awt.headless=true','-cp',os.pathsep.join(map(str,[ROOT/'app/build/classes',ROOT/'app/build/test-classes'])),'editor.IntegrationSmoke',
                     str(ROOT/'python-service'),str(ROOT/'tmp/smoke.psd')],cwd=ROOT,check=True)

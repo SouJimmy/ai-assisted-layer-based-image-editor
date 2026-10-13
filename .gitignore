@@ -45,3 +45,8 @@ tmp/
 
 # Interrupted model downloads
 *.pt.partial
+
+# Coverage reports and pinned tool cache
+reports/
+.cache/
+.coverage.*
