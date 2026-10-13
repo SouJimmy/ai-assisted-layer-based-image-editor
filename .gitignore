@@ -1,0 +1,47 @@
+# Track repository ignore rules even when global rules ignore this filename
+!.gitignore
+
+# macOS and editor files
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Java build outputs
+.gradle/
+build/
+target/
+*.class
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+local.properties
+
+# Model weights (keep manifests and license records)
+*.pt
+*.pth
+*.onnx
+*.safetensors
+
+# Runtime data and generated outputs
+logs/
+*.log
+output/
+tmp/
+
+# Interrupted model downloads
+*.pt.partial
