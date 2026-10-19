@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Install locked dependencies into a fresh temporary venv and verify degraded service startup.
 
-Use the existing Python 3.12 interpreter. --wheelhouse installs without network access.
+Use the existing Python 3.11 interpreter. --wheelhouse installs without network access.
 --ai additionally installs the full lock and verifies the configured model.
 This does not certify a different OS or a different evaluation PC.
 """
@@ -30,8 +30,8 @@ def main():
     args = parser.parse_args()
     if args.ai and args.wheelhouse:
         parser.error("--wheelhouse supports the core lock only")
-    if sys.version_info[:2] != (3, 12):
-        parser.error("Run with Python 3.12")
+    if sys.version_info[:2] != (3, 11):
+        parser.error("Run with Python 3.11")
     with tempfile.TemporaryDirectory(prefix="editor-clean-") as temporary:
         environment = Path(temporary) / "venv"
         subprocess.run([sys.executable, "-m", "venv", str(environment)], check=True)

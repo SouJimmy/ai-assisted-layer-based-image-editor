@@ -241,6 +241,8 @@ def import_psd(data):
                 )
         if sum(im.width * im.height * 4 for im in assets.values()) > MAX_RASTER_BYTES:
             raise ServiceError("RESOURCE_LIMIT", "展開画像が上限を超えています", 413)
+        if len(nodes) > 500:
+            raise ServiceError("RESOURCE_LIMIT", "返却ノード数が上限を超えています", 413)
         manifest = {
             "schemaVersion": 1,
             "canvasWidth": psd.width,

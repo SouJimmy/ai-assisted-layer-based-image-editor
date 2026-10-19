@@ -1,0 +1,242 @@
+[
+  {
+    "width": 1920,
+    "height": 1080,
+    "operation": "CROP",
+    "first_ms": 49.042,
+    "median_ms": 24.251,
+    "max_ms": 27.434,
+    "heap_pool_peak_sum_bytes": 77979176,
+    "checksum": -926084622
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "operation": "ROTATE_RIGHT",
+    "first_ms": 66.946,
+    "median_ms": 58.496,
+    "max_ms": 60.062,
+    "heap_pool_peak_sum_bytes": 60329592,
+    "checksum": -322952395
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "operation": "ROTATE_LEFT",
+    "first_ms": 61.609,
+    "median_ms": 61.465,
+    "max_ms": 62.605,
+    "heap_pool_peak_sum_bytes": 60327144,
+    "checksum": -1530848011
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "operation": "FLIP_H",
+    "first_ms": 54.186,
+    "median_ms": 53.633,
+    "max_ms": 53.671,
+    "heap_pool_peak_sum_bytes": 60323016,
+    "checksum": -1530848011
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "operation": "FLIP_V",
+    "first_ms": 53.145,
+    "median_ms": 52.052,
+    "max_ms": 52.374,
+    "heap_pool_peak_sum_bytes": 60320952,
+    "checksum": -322952395
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "operation": "RESIZE",
+    "first_ms": 59.264,
+    "median_ms": 45.873,
+    "max_ms": 47.19,
+    "heap_pool_peak_sum_bytes": 41448792,
+    "checksum": -591323751
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "operation": "COLOR_ADJUST",
+    "first_ms": 114.286,
+    "median_ms": 74.084,
+    "max_ms": 77.082,
+    "heap_pool_peak_sum_bytes": 85489024,
+    "checksum": -590532446
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "operation": "GRAYSCALE",
+    "first_ms": 66.643,
+    "median_ms": 62.395,
+    "max_ms": 63.381,
+    "heap_pool_peak_sum_bytes": 58226912,
+    "checksum": -597926820
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "operation": "SEPIA",
+    "first_ms": 76.394,
+    "median_ms": 76.618,
+    "max_ms": 76.663,
+    "heap_pool_peak_sum_bytes": 85489952,
+    "checksum": -595759273
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "operation": "NEGATIVE",
+    "first_ms": 60.939,
+    "median_ms": 59.427,
+    "max_ms": 59.75,
+    "heap_pool_peak_sum_bytes": 58231104,
+    "checksum": -599792789
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "operation": "BLUR",
+    "first_ms": 383.908,
+    "median_ms": 339.157,
+    "max_ms": 352.46,
+    "heap_pool_peak_sum_bytes": 92830120,
+    "checksum": -641721183
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "operation": "MOSAIC",
+    "first_ms": 55.963,
+    "median_ms": 50.073,
+    "max_ms": 51.792,
+    "heap_pool_peak_sum_bytes": 58227136,
+    "checksum": -322559348
+  },
+  {
+    "width": 3840,
+    "height": 2160,
+    "operation": "CROP",
+    "first_ms": 96.917,
+    "median_ms": 98.05,
+    "max_ms": 100.824,
+    "heap_pool_peak_sum_bytes": 218663488,
+    "checksum": -1400030642
+  },
+  {
+    "width": 3840,
+    "height": 2160,
+    "operation": "ROTATE_RIGHT",
+    "first_ms": 258.684,
+    "median_ms": 245.919,
+    "max_ms": 245.982,
+    "heap_pool_peak_sum_bytes": 135828016,
+    "checksum": -662677400
+  },
+  {
+    "width": 3840,
+    "height": 2160,
+    "operation": "ROTATE_LEFT",
+    "first_ms": 245.624,
+    "median_ms": 248.185,
+    "max_ms": 253.85,
+    "heap_pool_peak_sum_bytes": 236487184,
+    "checksum": 1216362712
+  },
+  {
+    "width": 3840,
+    "height": 2160,
+    "operation": "FLIP_H",
+    "first_ms": 218.948,
+    "median_ms": 215.278,
+    "max_ms": 216.281,
+    "heap_pool_peak_sum_bytes": 236487184,
+    "checksum": 1216362712
+  },
+  {
+    "width": 3840,
+    "height": 2160,
+    "operation": "FLIP_V",
+    "first_ms": 218.551,
+    "median_ms": 207.792,
+    "max_ms": 208.426,
+    "heap_pool_peak_sum_bytes": 135828016,
+    "checksum": -662677400
+  },
+  {
+    "width": 3840,
+    "height": 2160,
+    "operation": "RESIZE",
+    "first_ms": 181.227,
+    "median_ms": 185.775,
+    "max_ms": 187.292,
+    "heap_pool_peak_sum_bytes": 160985592,
+    "checksum": -1199556307
+  },
+  {
+    "width": 3840,
+    "height": 2160,
+    "operation": "COLOR_ADJUST",
+    "first_ms": 305.697,
+    "median_ms": 299.733,
+    "max_ms": 301.042,
+    "heap_pool_peak_sum_bytes": 169380400,
+    "checksum": -1198832330
+  },
+  {
+    "width": 3840,
+    "height": 2160,
+    "operation": "GRAYSCALE",
+    "first_ms": 230.285,
+    "median_ms": 228.063,
+    "max_ms": 235.621,
+    "heap_pool_peak_sum_bytes": 220760608,
+    "checksum": -1203025077
+  },
+  {
+    "width": 3840,
+    "height": 2160,
+    "operation": "SEPIA",
+    "first_ms": 239.402,
+    "median_ms": 233.854,
+    "max_ms": 238.935,
+    "heap_pool_peak_sum_bytes": 337148416,
+    "checksum": -1201383099
+  },
+  {
+    "width": 3840,
+    "height": 2160,
+    "operation": "NEGATIVE",
+    "first_ms": 233.528,
+    "median_ms": 221.599,
+    "max_ms": 229.806,
+    "heap_pool_peak_sum_bytes": 228100640,
+    "checksum": -1199519529
+  },
+  {
+    "width": 3840,
+    "height": 2160,
+    "operation": "BLUR",
+    "first_ms": 1284.322,
+    "median_ms": 1295.667,
+    "max_ms": 1296.869,
+    "heap_pool_peak_sum_bytes": 232532480,
+    "checksum": -1115604626
+  },
+  {
+    "width": 3840,
+    "height": 2160,
+    "operation": "MOSAIC",
+    "first_ms": 201.922,
+    "median_ms": 193.816,
+    "max_ms": 194.568,
+    "heap_pool_peak_sum_bytes": 226005552,
+    "checksum": -930792167
+  }
+]

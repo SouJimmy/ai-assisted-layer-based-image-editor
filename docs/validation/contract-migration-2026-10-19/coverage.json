@@ -1,0 +1,52 @@
+{
+  "java": {
+    "line": 97.12808730614589,
+    "branch": 85.82278481012658,
+    "counters": {
+      "INSTRUCTION": {
+        "missed": 287,
+        "covered": 8405
+      },
+      "BRANCH": {
+        "missed": 112,
+        "covered": 678
+      },
+      "LINE": {
+        "missed": 50,
+        "covered": 1691
+      },
+      "COMPLEXITY": {
+        "missed": 111,
+        "covered": 574
+      },
+      "METHOD": {
+        "missed": 6,
+        "covered": 272
+      },
+      "CLASS": {
+        "missed": 0,
+        "covered": 80
+      }
+    }
+  },
+  "python": {
+    "line": 97.73519163763066,
+    "branch": 93.18181818181819,
+    "totals": {
+      "covered_lines": 561,
+      "num_statements": 574,
+      "percent_covered": 96.66666666666667,
+      "percent_covered_display": "97",
+      "missing_lines": 13,
+      "excluded_lines": 0,
+      "percent_statements_covered": 97.73519163763066,
+      "percent_statements_covered_display": "98",
+      "num_branches": 176,
+      "num_partial_branches": 12,
+      "covered_branches": 164,
+      "missing_branches": 12,
+      "percent_branches_covered": 93.18181818181819,
+      "percent_branches_covered_display": "93"
+    }
+  }
+}

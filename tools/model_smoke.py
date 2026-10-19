@@ -12,11 +12,15 @@ from editor_helper.model_runtime import MobileSamBackend
 from PIL import Image, ImageDraw
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--fallback", action="store_true")
+mode = parser.add_mutually_exclusive_group()
+mode.add_argument("--fallback", action="store_true")
+mode.add_argument("--cpu", action="store_true")
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 backend = MobileSamBackend(root / "python-service/models/model-manifest.json")
 backend.initialize()
+if args.cpu and backend.device != "cpu":
+    backend._cpu()
 image = Image.new("RGB", (128, 96), "white")
 ImageDraw.Draw(image).rectangle((20, 15, 80, 75), fill="red")
 buffer = BytesIO()

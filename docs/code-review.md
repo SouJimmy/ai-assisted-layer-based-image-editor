@@ -23,10 +23,10 @@ CPU再試行について重複していた弱いテスト2件は、呼出し回�
 | モデルとキャッシュ | `model_runtime.py`、`image_cache.py` |
 | PSDの抽出と代替合成 | `psd_importer.py` |
 
-Javaのファイルは`app/src/main/java/editor/`、Pythonのファイルは`python-service/src/editor_helper/`にあります。Javaの`ContractTests`は通信・起動管理等の契約検証であり、カバレッジ値のためだけのテストではありません。
+Javaのファイルは移行後の`processing-backend/src/main/java/jp/ac/example/imageeditor/`と`common-contract/src/main/java/jp/ac/example/imageeditor/`、Pythonのファイルは`python-service/src/editor_helper/`にあります。Javaの`ContractTests`は通信・起動管理等の契約検証であり、カバレッジ値のためだけのテストではありません。
 
 ## 検証と残る境界
 
 Javaの回帰テスト1,397項目、契約テスト226項目、Pythonの44ケースを通過しました。実モデルのMPS推論で候補3件、正負クリック補正、画像解放、PSD取り込みの結合テストも通過しました。カバレッジは[計測結果](coverage.md)、再現コマンドと書式チェックは[開発と使い方](usage.md)を参照してください。
 
-PSDのノードを変更不可のMapで返す暫定契約は残っています。担当AとのAG-05の合意後に共通DTOへ固定する対象です。独自JSON実装も、将来共通のビルド・依存構成が決まる際に採用ライブラリを検討できます。現時点では通信契約のテストで動作を確認しています。
+PSDの公開ノードは移行時に型付きDTOへ変更しました。Aの保存情報へ変換する共同確認は残っています。独自JSON実装は移行時にJacksonへ置き換え、同じ通信境界の検証を維持しました。

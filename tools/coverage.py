@@ -2,12 +2,9 @@
 """Measure all production Java/Python code; never count test files as production coverage."""
 
 import argparse
-import hashlib
 import json
 import os
 import subprocess
-import sys
-import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -21,59 +18,19 @@ args = parser.parse_args()
 OUT = ROOT / args.output
 OUT.mkdir(parents=True, exist_ok=True)
 PYTHON = ROOT / "python-service/.venv/bin/python"
-manifest = json.loads((ROOT / "tools/jacoco.json").read_text())
-cache = ROOT / ".cache/jacoco"
-cache.mkdir(parents=True, exist_ok=True)
-for item in manifest["artifacts"].values():
-    path = cache / item["file"]
-    if not path.exists():
-        data = urllib.request.urlopen(item["url"], timeout=30).read()
-        if hashlib.sha256(data).hexdigest() != item["sha256"]:
-            raise SystemExit("JaCoCo checksum mismatch")
-        path.write_bytes(data)
-    if hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]:
-        raise SystemExit("JaCoCo cache checksum mismatch")
-agent = cache / manifest["artifacts"]["agent"]["file"]
-cli = cache / manifest["artifacts"]["cli"]["file"]
+from java_env import environment, gradle
+
 subprocess.run(
-    [sys.executable, str(ROOT / "tools/build.py"), "--compile-tests"], cwd=ROOT, check=True
-)
-execution = OUT / "java.exec"
-if execution.exists():
-    execution.unlink()
-runners = ["editor.RegressionTests", "editor.ContractTests"]
-classpath = os.pathsep.join(map(str, [ROOT / "app/build/classes", ROOT / "app/build/test-classes"]))
-for runner in runners:
-    subprocess.run(
-        [
-            "java",
-            f"-javaagent:{agent}=destfile={execution},append=true",
-            "-Djava.awt.headless=true",
-            "-cp",
-            classpath,
-            runner,
-        ],
-        cwd=ROOT,
-        check=True,
-    )
-subprocess.run(
-    [
-        "java",
-        "-jar",
-        str(cli),
-        "report",
-        str(execution),
-        "--classfiles",
-        str(ROOT / "app/build/classes"),
-        "--sourcefiles",
-        str(ROOT / "app/src/main/java"),
-        "--html",
-        str(OUT / "java-html"),
-        "--xml",
-        str(OUT / "java.xml"),
-    ],
+    gradle(":processing-backend:test", ":processing-backend:jacocoTestReport"),
+    cwd=ROOT,
+    env=environment(),
     check=True,
 )
+java_report = ROOT / "processing-backend/build/reports/jacoco/test/jacocoTestReport.xml"
+import shutil
+
+shutil.copyfile(java_report, OUT / "java.xml")
+shutil.copytree(java_report.parent / "html", OUT / "java-html", dirs_exist_ok=True)
 env = dict(
     os.environ, PYTHONPATH=str(ROOT / "python-service/src"), COVERAGE_FILE=str(OUT / ".coverage")
 )

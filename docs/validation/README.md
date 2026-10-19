@@ -1,5 +1,7 @@
 # 担当Bの性能・品質・環境再現の評価
 
+この文書は2026年10月13日の旧環境の測定記録です。現在のJava 21 / Python 3.11への移行結果は[移行実装記録](../contract-migration.md)を参照してください。
+
 測定日：2026年10月13日。Apple M1 Pro、メモリ32GiB、macOS 27.0.1 arm64、OpenJDK 17.0.19、Python 3.12.14。AIはMobileSAM / MPSです。
 
 ## 結果の要点
@@ -97,7 +99,7 @@
 
 ```sh
 python3 tools/build.py --compile-tests
-java -Xmx2g -Djava.awt.headless=true -cp app/build/classes:app/build/test-classes editor.ProcessingBenchmark 3
+./gradlew :processing-backend:benchmark
 python-service/.venv/bin/python tools/validate_b.py --cycles 300
 python-service/.venv/bin/python tools/verify_clean_environment.py --ai
 ```

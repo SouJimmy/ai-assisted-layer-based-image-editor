@@ -314,6 +314,16 @@ class PsdTests(unittest.TestCase):
             self.assertEqual(manifest["assets"], [])
             self.assertEqual(manifest["nodes"][0]["importDisposition"], "EMPTY_METADATA")
 
+    def test_document_replacement_counts_toward_node_limit(self):
+        psd = PSDImage.new("RGBA", (4, 4))
+        for index in range(500):
+            layer = PixelLayer.frompil(Image.new("RGBA", (1, 1), "red"), psd, name=str(index))
+            if index == 0:
+                layer.blend_mode = BlendMode.MULTIPLY
+        with self.assertRaises(ServiceError) as failure:
+            self.archive(psd)
+        self.assertEqual(failure.exception.code, "RESOURCE_LIMIT")
+
 
 if __name__ == "__main__":
     unittest.main()
