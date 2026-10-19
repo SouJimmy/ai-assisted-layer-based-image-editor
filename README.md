@@ -21,11 +21,13 @@ java -Djava.awt.headless=true -cp app/build/classes editor.cli.Main input.png gr
 
 ## ドキュメント
 
-2026年10月19日に担当Aの詳細設計と回答を受領しました。[移行・結合計画](docs/coordination/担当A回答を踏まえた移行・結合計画.md)に、現実装との差分と次の実施順をまとめています。Java 21・共通contract等への実装移行はこれからです。
+2026年10月19日に担当Aの詳細設計と回答を受領しました。[移行・結合計画](docs/coordination/担当A回答を踏まえた移行・結合計画.md)に、現実装との差分と次の実施順をまとめています。B詳細設計を改訂し、[共通contract設計書](docs/design/共通contract設計書.md)で具体型・署名・取消等を定義しました。Java 21・共通contract等への実装移行はこれからです。
 
 | ドキュメント | 内容 |
 | --- | --- |
 | [担当A回答を踏まえた移行・結合計画](docs/coordination/担当A回答を踏まえた移行・結合計画.md) | A回答との差分、環境移行、共通API、初回結合と受入の順序 |
+| [共通contract設計書](docs/design/共通contract設計書.md) | 公開API、型付きDTO、取消・checked例外、サービス寿命の具体案 |
+| [共通contract具体案の確認事項](docs/coordination/共通contract具体案の確認事項.md) | A回答にない追加具体案と、Aへ確認する残りの項目 |
 | [担当B 詳細設計書](docs/design/担当B_詳細設計書.md) | 画像処理、AI通信、Pythonサービス、PSD取り込み、異常系、テスト仕様 |
 | [担当Aへの仕様確認と結合の相談](docs/coordination/担当Aとの合意事項.md) | 担当Aに確認する9項目、Bの提案、回答欄 |
 | [開発と使い方](docs/usage.md) | 環境構築、ビルド、画像加工、サービス起動、テスト |

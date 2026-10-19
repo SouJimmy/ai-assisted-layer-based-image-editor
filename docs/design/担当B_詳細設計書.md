@@ -1,12 +1,12 @@
 # 画像編集ツール 担当B 詳細設計書
 
-2026年10月19日受領のA資料との差分は[移行・結合計画](../coordination/担当A回答を踏まえた移行・結合計画.md)で管理しています。本書のJava 17・Python 3.12等をAの指定と合意済みの環境とは扱いません。共通contractの具体化後に本書も更新します。
+本書は2026年10月19日受領の担当A資料に合わせた改訂後の設計です。公開型・署名・取消・例外・サービス寿命の具体規約は[共通contract設計書](共通contract設計書.md)を参照してください。A回答で定められた方針と、Bが追加した相互レビュー用の具体案を区別します。
 
 画像処理 AI連携 PSD取り込み 外部処理基盤
 
-作成日 2026年10月13日  /  対象 Version 1
+作成日 2026年10月13日 / 更新日 2026年10月19日 / 対象 Version 1
 
-実装済み範囲・B側の暫定API・初期PSD取り込みの制限は[実装状況](../implementation.md)を参照してください。共通境界は担当Aとの合意後に固定します。
+実装済み範囲・暫定API・検証済み環境は[実装状況](../implementation.md)を参照してください。本書のJava 21・Python 3.11方針や共通contractへの移行は未実装であり、記載だけで完了とは扱いません。実施順は[移行・結合計画](../coordination/担当A回答を踏まえた移行・結合計画.md)に従います。
 
 ### 本書の目的
 
@@ -14,9 +14,9 @@
 
 ### 設計の基準
 
-既存資料で確定したMobileSAM常駐、imageId単位の埋め込みキャッシュ、最大3候補、MPSからCPUへの1回の再試行、psd-tools、TYPE_INT_ARGB_PRE、非同期実行、256px差分タイルとの連携を維持する。資料内で暫定記述と完了記録が併存する場合は、概要設計20章および技術検証メモ10章の確定差分を優先する。
+既存資料で確定したMobileSAM常駐、imageId単位の埋め込みキャッシュ、最大3候補、MPSからCPUへの1回の再試行、psd-tools、TYPE_INT_ARGB_PRE、非同期実行、256px差分タイルとの連携を維持する。Aとの境界は今回の担当A回答と担当A詳細設計を基準とし、処理系の方針は概要設計・技術検証メモの確定差分を維持する。
 
-本文中の「設計値」「提案契約」は本書で具体化した値または仕様を示す。共通contract、依存バージョン、起動構成は担当Aと相互レビューして固定する。既存資料に記載された実測値は参照値であり、本書の実装での達成を意味しない。
+本文中の「設計値」は本書で具体化した数値・仕様を示す。A回答にない追加の具体規約は相互レビュー用のB案として共通contract設計書に明記する。共通contract、依存バージョン、起動構成は担当Aと相互レビューして固定する。既存資料に記載された実測値は参照値であり、本書の実装での達成を意味しない。
 
 ### 構成
 
@@ -54,49 +54,51 @@ PSD書き出し、完全なPhotoshop互換、AI画像生成、クラウド送信
 
 ## 2 モジュールと依存関係
 
-| パッケージ | 主要クラス | 責務 |
-| --- | --- | --- |
-| contract.processing | ProcessingRequest / ProcessingResult / PixelRect | 画像処理入出力と例外契約 |
-| processing | ImageProcessor / 各Processor / ImageFilter | GUI非依存の画素演算 |
-| contract.ai | AiRequest / AiMaskResult / MaskCandidate | 画像登録と推論の契約 |
-| integration.ai | HttpAiSegmentationService / ResponseValidator | HTTP呼出し、応答検証、例外変換 |
-| integration.runtime | LocalServiceManager / ProcessingExecutor | 子プロセス管理、実行上限、取消 |
-| contract.psd | PsdImportResult / PsdNode / ImportWarning | 階層とRGBAの中間表現 |
-| integration.psd | HttpPsdImportService / PsdArchiveReader | PSD転送と返却データの検証 |
-| python-service | api / model_runtime / image_cache / psd_importer | FastAPI、MobileSAM、キャッシュ、psd-tools |
+```text
+root/
+  editor-app/          # A：JavaFX、Document/Layer、履歴、保存、Coordinator
+  common-contract/     # A+B：公開interface、record、取消・例外
+  processing-backend/  # B：画素処理、HTTP、PSD ZIP、サービス寿命管理、検証用CLI
+  python-service/      # B：FastAPI、MobileSAM、psd-tools
+  gradle/libs.versions.toml
+  settings.gradle.kts
+  build.gradle.kts
+  gradlew / gradlew.bat / gradle/wrapper/
+```
+
+Javaは21、JavaFXは21系、Gradle Wrapperは8.10.2、Kotlin DSLとVersion Catalog、JUnit 5、Jackson 2.18系、Java標準HttpClientを用いる。JavaFX・Jackson・JUnitの正確なpatch版はAの既存Catalogを確認し、なければ具体案と検証結果を相互レビューして固定する。自動的なlatest選択はしない。
+
+ルートパッケージはjp.ac.example.imageeditor。common-contractのcontract.processing / contract.ai / contract.psdを領域別の公開境界とし、共有のAsyncOperation・ErrorCode等はcontract.commonへ置く案とする。processing-backendの具体型と配置は[共通contract設計書2章](共通contract設計書.md)を正本とする。
 
 ### 呼び出し方向
 
-```
-A Controller / Task
-  -> contract interfaces
-     -> B ImageProcessor
-     -> B HttpAiSegmentationService -> local Python
-     -> B HttpPsdImportService       -> local Python
-  <- Result / typed exception
-A validates document revision -> Command -> Model -> UI
+```text
+A Controller -> A Coordinator -> common-contract interface
+  -> B DefaultImageProcessor / HttpAiSegmentationService / HttpPsdImportService
+  -> Python（AIとPSDのみ）
+  <- Result / typed checked exception
+A validates document/contentRevision/session/requestId -> Command -> Model -> UI
 ```
 
-contractにはJavaFXやA所有モデルへの依存を入れない。BufferedImageはJava側の画像境界でのみ用いる。PythonにはJSON、PNG、PSDのバイト列だけを渡す。DTOはrecord相当の不変構造とし、リストを防御的コピーする。BufferedImage自体は可変のため、別途所有権規約を適用する。
+contractはJavaFX、AのDocument/Layer、Jackson、B実装に依存しない。java.desktopのBufferedImageを画像境界に用いる。Jacksonと通信DTOはB内部へ閉じ込め、Pythonへは既存HTTP API v1のJSON・PNG・PSDバイト列だけを渡す。Aは構成箇所でB実装を生成・注入し、ControllerでB具象型を直接newしない。
 
-### 主要実装の置き換え
-
-ImageProcessorは処理種別ごとにProcessorへ委譲する。ImageFilterはapply(BufferedImage source)を基本とし、FilterProcessorが結果メタデータを付与する。AiSegmentationServiceとPsdImportServiceはインターフェースとし、固定画像を返すStubでUI側を先に結合できるようにする。PythonプロセスとHTTPクライアントは注入可能にして異常系を再現する。
+画素処理は同期processと非同期submitの同じ演算を共有する。ImageFilterはB内部用で、Aの通常入口は共通ImageProcessor。共通型とStubを先に用意し、成功・型付き失敗・取消・遅延旧結果を実モデルなしで結合できるようにする。
 
 ## 3 画像処理の共通契約
 
-```
-ProcessingResult process(ProcessingRequest request,
-                         ProcessingContext context);
-BufferedImage ImageFilter.apply(BufferedImage source);
+```java
+ProcessingResult process(ProcessingRequest request, ProcessingContext context)
+    throws ProcessingException;
+AsyncOperation<ProcessingResult> submit(
+    ProcessingRequest request, ProgressListener progress);
 ProcessingRequest(source, operation, parameters)
-ProcessingResult(image, sourceChangedBounds,
-                 outputChangedBounds, geometryChanged,
-                 deterministic, algorithmVersion)
+ProcessingResult(image, sourceChangedBounds, outputChangedBounds,
+                 geometryChanged, deterministic, algorithmVersion,
+                 operation, parameters)
 ProcessingContext(cancellationToken, progressListener)
 ```
 
-operationはCROP、ROTATE_RIGHT、ROTATE_LEFT、FLIP_H、FLIP_V、RESIZE、COLOR_ADJUST、GRAYSCALE、SEPIA、NEGATIVE、BLUR、MOSAIC。parametersは処理ごとの型で定義し、文字列Mapによる無検証の値受け渡しを避ける。メソッドは同期処理で、非同期化は実行器が担当する。
+正確なJava型・所有権・取消の競合規則は共通contract設計書3～4章による。operationはCROP、ROTATE_RIGHT、ROTATE_LEFT、FLIP_H、FLIP_V、RESIZE、COLOR_ADJUST、GRAYSCALE、SEPIA、NEGATIVE、BLUR、MOSAIC。同期processは呼出しスレッドで実行するためUIスレッドでは呼ばない。非同期submitはBの1ワーカー・待機2件へ委譲する。
 
 ### 画素表現と所有権
 
@@ -108,11 +110,11 @@ operationはCROP、ROTATE_RIGHT、ROTATE_LEFT、FLIP_H、FLIP_V、RESIZE、COLOR
 
 原点は左上、xは右、yは下、単位は原寸の画素。PixelRect(x,y,width,height)は整数の半開区間[x,x+width)×[y,y+height)。ズーム・スクロール・レイヤー位置の逆変換はAが行い、Bは画像内座標だけを受け取る。
 
-設計値：幅・高さは各1～16384、総画素数は最大33,554,432。longの積で検証し、出力寸法にも適用する。UIの指定範囲と上限を一致させる。null、不正な型、範囲外、NaN、InfinityはINVALID_ARGUMENTで処理前に拒否する。上限は性能評価後に両者で調整する。
+設計値：幅・高さは各1～16384、総画素数は最大33,554,432。longの積で検証し、出力寸法にも適用する。UIの指定範囲と上限を一致させる。null、不正な型、範囲外、NaN、InfinityはINVALID_ARGUMENTで処理前に拒否する。上限を変更する場合は性能評価の根拠とともに相互レビューする。
 
-### パラメータ型の提案
+### パラメータ型
 
-以下を共通contractの具体案とする。型名・例外型・取消APIの採用はAG-01で固定する。enumとparametersの組み合わせを入口で検証し、誤った型はINVALID_ARGUMENTとする。
+以下をsealedなProcessingParametersの具体案とする。A回答に従い処理別recordを使用し、具体署名は共通contract設計書で相互レビューする。enumとparametersの組み合わせを入口で検証し、誤った型はINVALID_ARGUMENTとする。
 
 | operation | parameters | 制約 |
 | --- | --- | --- |
@@ -123,11 +125,11 @@ operationはCROP、ROTATE_RIGHT、ROTATE_LEFT、FLIP_H、FLIP_V、RESIZE、COLOR
 | MOSAIC | MosaicParameters(int blockSize) | 1～128 |
 | その他 | NoParameters | 他のパラメータ型は拒否 |
 
-ProcessingResultは適用したoperation、parametersも保持する案とし、再実行の入力を明確にする。CancellationTokenはisCancellationRequested()、ProgressListenerはonProgress(double fraction)を基本案とする。同期処理での取消はProcessingException(code=CANCELLED)、非同期の失敗はFutureの例外完了へ統一する案とする。
+ProcessingResultはoperation・parametersを保持し、再実行入力を明確にする。CancellationTokenはisCancellationRequested()、ProgressListenerはonProgress(double fraction)。同期失敗はProcessingException、非同期失敗はstageの領域別checked例外による例外完了とする。引数不正・BUSYも非同期APIでは失敗済みハンドルとして返す。
 
 ### 変更範囲
 
-同サイズの全体処理は入力・出力の全面を変更候補範囲として返す。実画素差の有無と履歴タイル化はAが判断する。寸法変更は旧画像全面と新画像全面、geometryChanged=trueを返す。画素が変わらない場合も出力は独立コピーとし、Aは不要な履歴登録を省略できる。
+同サイズの全体処理は入力・出力の全面を変更候補範囲として返す。実画素差の有無と履歴タイル化はAが判断する。geometryChangedは入出力の幅または高さが異なる場合trueとし、旧画像全面と新画像全面を返す。正方形回転等で寸法が同じならfalseで、操作種別はoperationから判断する。画素が変わらない場合も出力は独立コピーとし、Aは不要な履歴登録を省略できる。
 
 ## 4 幾何変換の詳細
 
@@ -152,7 +154,9 @@ Aは幅を基準にする場合、height=max(1,floor(sourceHeight×targetWidth/s
 
 ### 対象画像と複数レイヤー
 
-Version 1のB契約は1枚のラスタ画像単位。画像全体の処理が必要な場合はAが合成スナップショットまたは各レイヤー画像を準備する。選択レイヤーの画素回転と、SHOULDのレイヤー変形プロパティは別操作とする。キャンバストリミングで各レイヤー位置をずらす場合、Aが全結果を揃えて1つのCommandにする。
+Version 1のB契約は1枚のラスタ画像単位。Layer単体のResize/Crop/画素回転はBを用い、Aが結果と位置を反映する。文書ResizeはAが全Layerを制御し、Raster/Drawingの画素ResizeだけBを利用する。TextはAが位置・文字サイズを調整して編集可能性を維持する。
+
+Canvas Resizeは画素を変えず、Canvas Cropは新Canvas寸法と全Layerのx-=cropX/y-=cropYだけを変更する。完全に範囲外のLayerも保持し描画時にclipする。これらにBの破壊的Cropを代用しない。文書全体90度回転もAがCanvas寸法と全Layerの位置・rotationを変更し、Text等をラスタ化しない。Aは全結果を先に準備し、成功時だけ1 Commandで確定する。
 
 ### 基準例
 
@@ -167,7 +171,7 @@ D E F              E B
 
 ## 5 色調整と基本フィルター
 
-設計値：明るさbは整数-255～255、コントラストcは0.0～3.0、彩度sは0.0～3.0。既定値はb=0、c=1、s=1。UIは利用者向けの目盛りからこの値へ変換する。round(v)=floor(v+0.5)、clamp(v)=min(255,max(0,v))として各段階で8bitへ丸める。alphaは変更しない。
+設計値：明るさbは整数-255～255、コントラストcは0.0～3.0、彩度sは0.0～3.0。既定値はb=0、c=1、s=1。AはUI値-100～100から変換する。明るさはround(UI×255/100)、コントラスト・彩度はUI≤0なら1+UI/100、UI≥0なら1+2×UI/100。Bは変換済みの内部値を受け取り、二重変換しない。round(v)=floor(v+0.5)、clamp(v)=min(255,max(0,v))として各段階で8bitへ丸める。alphaは変更しない。
 
 ### ColorAdjustProcessor
 
@@ -218,7 +222,7 @@ fill block with (Aout, Rout, Gout, Bout)
 
 ### 進捗と取消
 
-ぼかしは水平パスを0～50%、垂直パスを50～100%とする。モザイクは完了ブロック行数から算出する。通知は最大10回/秒を設計値とし、行またはブロック行ごとに取消を確認する。取消時はCANCELLEDを返し、部分画像を適用しない。
+ぼかしは行リングバッファで水平・垂直を逐次実行し、完了出力行数/Hで0～100%を通知する。全画像の水平パスを先に完了する設計ではない。モザイクは完了ブロック行数から算出する。通知は単調非減少、最大10回/秒を基本とし成功時に最終1.0を必ず通知する。行またはブロック行ごとに取消を確認する。取消時はCANCELLEDを返し、部分画像を適用しない。
 
 ### 品質確認
 
@@ -226,27 +230,28 @@ fill block with (Aout, Rout, Gout, Bout)
 
 ## 7 AIのJava契約と座標
 
-```
+```java
 interface AiSegmentationService {
-  CompletionStage<RegisteredImage> registerImage(
+  AsyncOperation<RegisteredImage> registerImage(
       BufferedImage snapshot, String sourceRevision);
-  CompletionStage<AiMaskResult> segment(AiRequest request);
-  CompletionStage<Void> releaseImage(String imageId);
+  AsyncOperation<AiMaskResult> segment(AiRequest request);
+  AsyncOperation<Void> releaseImage(RegisteredImage image);
+  void invalidateRequests(RegisteredImage image);
 }
-AiRequest(imageId, sourceRevision, requestId, points)
-PromptPoint(x, y, label) // label: POSITIVE or NEGATIVE
-AiMaskResult(imageId, sourceRevision, requestId,
-             candidates, sourcePoints, deviceUsed)
-MaskCandidate(candidateId, mask, score)
+AiRequest(RegisteredImage image, UUID requestId, List<PromptPoint> points)
+RegisteredImage(imageId, sourceRevision, width, height, serviceInstanceId)
+AiMaskResult(RegisteredImage image, UUID requestId,
+             candidates, sourcePoints, DeviceKind deviceUsed)
+MaskCandidate(candidateId, BufferedImage mask, double score)
 ```
 
-RegisteredImageの提案項目はimageId、sourceRevision、width、height、serviceInstanceId。キャンセルを呼出し側から行えるよう、戻り値をCompletionStageのままにするか取消ハンドル付きにするかはAG-01で合意する。B内部は取消可能なCompletableFutureで実装し、cancelを通信・待機ジョブの取消へ伝播する。
+公開型はcontract.ai、詳細は共通contract設計書5章による。取消はAsyncOperation.cancel()から伝播し、CANCELLEDのAiServiceExceptionで例外完了する。失効だけを行うinvalidateRequestsと、キャッシュを破棄するreleaseImageを分離する。
 
-これは提案契約。sourceRevisionはAが管理する編集対象画像の世代を識別する不透明文字列。requestIdは各推論要求のUUID。imageIdはPython側が発行する。candidateIdは結果ごとに新規発行し、以前の候補IDを流用しない。selectedCandidateIdはAの選択状態に保持し、Bは候補を自動確定しない。
+sourceRevisionはAがdocumentId + ":" + 単調増加contentRevisionで生成し、Bは不透明文字列として一致検証する。Undo/RedoでもAは新しい番号を発行する。requestIdは推論要求ごとのUUID、imageIdはPython発行、serviceInstanceIdは起動ごとのUUID。以前の候補IDは流用しない。候補選択はAが保持し、Bは自動確定しない。
 
 ### 画像登録とクリック
 
-登録は選択中の対象ラスタ画像の固定スナップショットを基本とする。透過画像は原寸を維持し、AI入力のRGB化では白背景へ合成する設計とする。抽出にはAが保持する元RGBAを使う。合成画像を対象にしたい場合も、Aがその画像を明示的に渡す。
+登録は選択中の対象ラスタ画像の固定スナップショットを基本とする。透過画像は原寸を維持し、AI入力のRGB化では白背景へ合成する設計とする。抽出にはAが保持する元RGBAを使う。Version 1の直接対象はRasterLayerのみとし、文字・描画・合成画像はAが別の明示的なラスタ化/合成操作を提供する場合だけ対象にする。
 
 点座標は原寸画像の画素中心を表す整数、0≤x<W、0≤y<H。Aがキャンバスからレイヤー座標へ逆変換し、floorで画素を決定する。サービスは内部のモデル入力座標へ変換する。点は1～64個、少なくとも1個は正クリック。追加補正では最新のクリック列全体を送る。Version 1の必須APIは点入力のみとする。
 
@@ -254,17 +259,17 @@ RegisteredImageの提案項目はimageId、sourceRevision、width、height、ser
 
 BのJavaクライアントはserviceInstanceIdとimageIdの組ごとにlatestRequestIdを保持する。segment受付時に最新IDを置き換え、同じ画像の未送信旧要求を取り消す。受信した応答のrequestIdがその送信要求と違う場合はINVALID_RESPONSE。送信要求とは一致するがlatestRequestIdではない場合はCANCELLED相当で破棄し、候補を返さない。画像削除、サービス再起動、AI操作取消でも該当の最新IDを無効化する。
 
-これはB内部の応答抑制である。UI反映までの間に新しいクリックが生じる競合もあるため、A側でも最新requestId、対象ID、画像世代、AIセッションの有効性を確認する必要がある。A側の保持方法と確定処理はAG-02・AG-03で合意する。登録処理にも世代を付け、登録完了時に対象が失効していればIDを解放する。
+これはB内部の応答抑制である。UI反映までの間に新しいクリックが生じる競合もあるため、A側でも最新requestId、対象ID、画像世代、AIセッションの有効性を確認する必要がある。Aは対象存在、contentRevision、aiSessionId、最新requestIdをUI反映直前に確認する。登録処理にも世代を付け、登録完了時に対象が失効していればIDを解放する。
 
 ### マスクの表現と確定処理
 
 maskは元画像と同寸法の8bitグレースケールPNG。画素0は背景、255は選択領域。二値化はモデルのmask_thresholdを用いる。Java側ではTYPE_BYTE_GRAY相当に読み、Rasterのサンプル値が0/255であることを検証する。getRGBの色空間変換値をマスクとして使わない。scoreは有限の予測スコアで、確率の保証として扱わない。
 
-Aの確定処理は元RGBを保持し、alpha′=round(alpha×mask/255)で透明な新規画像を作る。レイヤー作成とCommand化はAが担当し、元画像を削除・変更しない。新画像を原寸で保持する場合は元レイヤーと同じ位置に置く。候補0件はHTTP 422、error.code=NO_RESULTで返す。空のcandidatesを成功応答として返さない。
+Aの確定処理は元RGBを保持し、alpha′=round(alpha×mask/255)で透明な新規画像を作る。レイヤー作成とCommand化はAが担当し、元画像を削除・変更しない。新画像は原寸で保持し元Layerの直上へ追加する。確定時点の位置・回転・拡縮・Layer opacityを引き継ぎ、visible=true、初期名は「元レイヤー名（AI抽出）」とする。Layer opacityは画素へ焼き込まない。候補0件はHTTP 422、error.code=NO_RESULTで返す。空のcandidatesを成功応答として返さない。
 
 ## 8 AI HTTP仕様
 
-提案契約：HTTP APIの互換バージョンはヘッダーX-Api-Version: 1で宣言する。パスは技術検証メモの候補を維持する。JSONはUTF-8、multipartの画像はimage/png。すべての要求に起動時発行のBearerトークンを付ける。以下の数値と上限は設計値。
+A回答で採用されたHTTP APIの互換バージョンはヘッダーX-Api-Version: 1で宣言する。パスは技術検証メモの候補を維持する。JSONはUTF-8、multipartの画像はimage/png。すべての要求に起動時発行のBearerトークンを付ける。以下の数値と上限は設計値。
 
 | メソッドとパス | 入力 | 成功応答と条件 |
 | --- | --- | --- |
@@ -335,7 +340,7 @@ HTTPの成功コードだけで成功判定しない。imageId、sourceRevision�
 
 ### 起動配置と実行方法
 
-B内部のサービス配置は以下を初期構成とする。アプリ全体のビルド構成と配布方法はAG-08の合意対象とする。
+アプリのJava/Gradle構成は2章、Python配置は以下とする。PythonはA指定の3.11系を移行先とし、具体版・全依存は別venvでの互換性検証後に固定する。現在の3.12.14用lockと環境は比較用に保持し、未検証のまま上書きしない。
 
 ```text
 python-service/
@@ -351,7 +356,7 @@ python-service/
   .venv/
 ```
 
-Pythonの実行パスは設定値pythonExecutableで受け取り、作業ディレクトリのPATH依存で選ばない。開発時の初期候補はpython-service/.venv/bin/python。Bは実装初日に技術検証と同じ環境の実行版を回収し、Python、PyTorch、MobileSAMコミット、psd-tools、FastAPI、ASGIサーバー等をrequirements.lockと環境記録に固定する。既存資料に正確な版がない依存を検証済みとして扱わず、クリーン環境での再現確認を完了条件とする。
+Pythonの実行パスは設定値pythonExecutableで受け取り、作業ディレクトリのPATH依存で選ばない。開発時の初期候補はpython-service/.venv/bin/python。Bは3.11系への移行検証で、Python、PyTorch、MobileSAMコミット、psd-tools、FastAPI、ASGIサーバー等をrequirements.lockと環境記録に固定する。既存資料に正確な版がない依存を検証済みとして扱わず、クリーン環境での再現確認を完了条件とする。
 
 ProcessBuilderの引数配列は次を基準とする。workingDirectoryはpython-serviceの絶対パス、srcはパッケージとして仮想環境へインストールする。
 
@@ -371,15 +376,21 @@ Pythonはホストを127.0.0.1に固定し、ポート0でソケットをbindし
 {"event":"listening","apiVersion":1,"host":"127.0.0.1","port":49152,"pid":12345,"serviceInstanceId":"uuid"}
 ```
 
-Javaはプロセス開始から10秒以内に通知を待ち、最大8KiBの1行、event、API版、host、ポート1～65535、起動した子のPIDを検証する。不正通知・子終了・通知期限超過ではその子だけを停止しSERVICE_UNAVAILABLEとする。通信とモデル準備を混同せず、通知後に認証付きhealthを500ms間隔で確認する。起動から60秒以内にAIが準備できなければAIを利用不可として通常編集を継続し、動作中のPSDサービスは停止しない。自動再起動ループは行わない。
+Javaはプロセス開始から10秒以内に通知を待ち、最大8KiBの1行、event、API版、host、ポート1～65535、起動した子のPIDを検証する。不正通知・子終了・通知期限超過ではその子だけを停止しSERVICE_UNAVAILABLEとする。通信とモデル準備を混同せず、通知後に認証付きhealthを500ms間隔で確認する。起動通知の検証時点から60秒以内にAIが準備できなければAIを利用不可として通常編集を継続し、動作中のPSDサービスは停止しない。自動再起動ループは行わない。
 
 ### LocalServiceManagerのライフサイクル
 
-STOPPED → STARTING → RUNNING → STOPPING → STOPPEDを基本とし、起動失敗はFAILED。RUNNINGは検証済みhealthへ到達した状態とし、AIとPSDの利用可否は別フラグで管理する。Javaはシェルを経由しないProcessBuilderの引数配列で設定済みPythonを起動する。Pythonは127.0.0.1の動的ポートへbindし、起動ハンドシェイクにポート・PID・API版を標準出力のJSON 1行で通知する。診断ログは標準エラーへ出し、両方を継続して読み取る。
+STOPPED → STARTING → RUNNINGを基本とし、再起動はSTOPPINGを経由する。最終closeはCLOSED、起動失敗はFAILED。RUNNINGは検証済みhealthへ到達した状態とし、AIとPSDの利用可否は別フラグで管理する。Javaはシェルを経由しないProcessBuilderの引数配列で設定済みPythonを起動する。Pythonは127.0.0.1の動的ポートへbindし、起動ハンドシェイクにポート・PID・API版を標準出力のJSON 1行で通知する。診断ログは標準エラーへ出し、両方を継続して読み取る。
 
 トークンはJavaが起動ごとに生成し環境変数で渡す。通信先はハンドシェイクのポートを検証して127.0.0.1へ固定し、リダイレクトとプロキシを無効化する。画像、クリック列、トークンをログに残さない。モデル重みは事前配置し、実行中に自動ダウンロードしない。
 
-設計値：接続2秒、health 2秒、画像登録30秒、segment 15秒、PSD 60秒、起動準備60秒。接続・要求タイムアウトを別々に設定する。自動HTTP再送は行わず、利用者の再試行は新requestIdにする。終了時は受付停止後にJavaが所有する子へ終了要求、5秒待機後に強制停止。終了要求は子Process.destroy()とし、Python側のSIGTERMハンドラーで受付停止、待機ジョブの取消、一時ファイル削除を行う。期限内に終了しなければdestroyForcibly()を用い、終了待ちを回収する。無関係なPythonプロセスを終了しない。
+設計値：接続2秒、health 2秒、画像登録30秒、segment 15秒、PSD 60秒、起動通知10秒、AI準備監視60秒。接続・要求タイムアウトを別々に設定する。自動HTTP再送は行わず、利用者の再試行は新requestIdにする。終了時は受付停止後にJavaが所有する子へ終了要求、5秒待機後に強制停止。終了要求は子Process.destroy()とし、Python側のSIGTERMハンドラーで受付停止、待機ジョブの取消、一時ファイル削除を行う。期限内に終了しなければdestroyForcibly()を用い、終了待ちを回収する。無関係なPythonプロセスを終了しない。
+
+公開start/restart/close、状態snapshot、再起動時の旧ID失効、最終closeでのreader/HTTP/executor解放は共通contract設計書7章に従う。closeは再利用可能なstopではなく最終終了とする。Aは未保存確認後にバックグラウンドでcloseし、終了完了を待ってUIを閉じる。
+
+設定はAが~/Library/Application Support/ImageEditor/config.jsonから読み、解決済みPython/サービス/manifest/logパスをBへ渡す。ログ先は同ディレクトリのlogs/。BはTokenを保存せず、生stderrを無条件で永続化しない。診断情報を選別し5MiB×3世代を初期値として保持する。ログ保存不能で通常編集を停止させない。
+
+Python 3.11対応では別venvへcore/fullを導入し、pip check、通常試験、PSD、MPS/CPUとfallback、クリーン起動/終了を確認する。成立後にlock・pyproject・CI・ツールと使い方を一括更新する。成立しない場合は3.12維持案と根拠をAへ提示し、検証前に対応済みとは扱わない。
 
 | HTTPまたは例外 | 共通コード | Aへ渡す次の操作 |
 | --- | --- | --- |
@@ -403,29 +414,28 @@ STOPPED → STARTING → RUNNING → STOPPING → STOPPEDを基本とし、起�
  "requestId":"uuid","retryable":true}}
 ```
 
-例外はProcessingException、AiServiceException、PsdImportExceptionにcode、requestId、原因を保持する。Java側の表示文言はコードに基づき安全な日本語へ変換する。正常編集はAIがFAILEDでも継続する。再起動は未完了要求を失敗させ、IDを無効化してから行う。
+操作例外はProcessingException、AiServiceException、PsdImportExceptionのchecked例外で、共通ErrorCode・requestId・原因・再試行可否を保持する。起動自体の失敗はBのServiceLifecycleExceptionとし、AIだけの準備失敗と区別する。AがErrorCodeから安全な日本語と次の操作へ変換する。正常編集はAIがFAILEDでも継続する。再起動は未完了要求を失敗させ、IDを無効化してから行う。
 
 ## 11 PSD取り込みの契約
 
-```
+```java
 interface PsdImportService {
-  CompletionStage<PsdImportResult> importPsd(Path file);
+  AsyncOperation<PsdImportResult> importPsd(Path file);
 }
-PsdImportResult(canvasWidth, canvasHeight, nodes,
-                rasterAssets, warnings, schemaVersion)
-PsdNode(id, parentId, siblingIndex, name, kind,
-        x, y, width, height, selfVisible, effectiveVisible,
-        opacity, effectiveOpacity, blendMode,
-        assetId, importDisposition, originalMetadata)
-ImportWarning(code, nodeId, message, disposition,
-              sourceKind, unsupportedFeature)
+PsdImportResult(schemaVersion, canvasWidth, canvasHeight,
+                List<PsdNode> nodes, Map<String, RasterAsset> rasterAssets,
+                List<ImportWarning> warnings)
 ```
 
-idは取り込みごとに生成する一意ID。siblingIndexは親内の下から上へ0始まりで統一し、Pythonライブラリの走査順をそのまま公開しない。x、yはPSDキャンバス基準の絶対整数座標で、負値とキャンバス外を許容する。opacityは0～1の浮動小数点値。kindには元の種類を保持する。
+PsdNode・RasterAsset・ImportDisposition・ImportWarning・MetadataValueは[共通contract設計書6章](共通contract設計書.md)に型を定義する。nodes/warningsを無検証のMapとして公開しない。元属性はライブラリ非依存の不変JSON値型で保持する。AがimportIdを発行しPsdOrigin(importId,nodeId)とDocument単位のPsdImportMetadataへ登録、.jimgのimports/{importId}.jsonへ元階層・属性・警告を保存する。元PSDファイル自体は埋め込まない。
+
+PSDは新しいDocumentとして開く。BはUIやDocumentを変更せず、Aは内部候補を構築してWarningを確認してもらい、続行時だけDocumentを公開する。取消時は既存Documentや履歴を変更しない。
+
+idは取り込みごとに生成する一意ID。siblingIndexは親内の下から上へ0始まりで統一し、Pythonライブラリの走査順を検証し、必要なら正規化してから公開する。x、yはPSDキャンバス基準の絶対整数座標で、負値とキャンバス外を許容する。opacityは0～1の浮動小数点値。kindには元の種類を保持する。
 
 ### PSD転送と返却
 
-提案API：POST /psd/importへmultipartのfileを送る。ローカルファイルパスをサーバーに渡して任意のファイルを読ませる構成にしない。成功時はapplication/zipを返し、manifest.jsonとassets/{assetId}.pngを含める。manifestのschemaVersionは1。ノードと警告はJSON、ラスタは原寸のRGBA PNGとする。
+API：POST /psd/importへmultipartのfileを送る。ローカルファイルパスをサーバーに渡して任意のファイルを読ませる構成にしない。成功時はapplication/zipを返し、manifest.jsonとassets/{assetId}.pngを含める。manifestのschemaVersionは1。ノードと警告はJSON、ラスタは原寸のRGBA PNGとする。
 
 ```
 manifest.json
@@ -435,7 +445,7 @@ manifest.json
   warnings: [ImportWarning ...]
 ```
 
-設計値：PSD入力128MiB、最大500ノード、展開ラスタ総量256MiB、ZIP応答256MiB。総量はwidth×height×4をlongで加算する。制限超過は部分取り込みでごまかさずRESOURCE_LIMITとする。PSBはVersion 1の保証対象外として拒否する。
+設計値：PSD入力128MiB、返却する代替ノードを含め最大500ノード、展開ラスタ総量256MiB、ZIP応答256MiB。総量はwidth×height×4をlongで加算する。制限超過は部分取り込みでごまかさずRESOURCE_LIMITとする。PSBはVersion 1の保証対象外として拒否する。
 
 ### Java側の検証と変換
 
@@ -462,7 +472,7 @@ JavaはRGBAをTYPE_INT_ARGB_PREへ変換してDTOを返す。Aが内部RasterLay
 
 BのVersion 1変換では、平坦なRasterLayerへの登録を前提に、透明度1・効果なし・調整なし・明示的なpass-throughグループだけを子ノードへ展開できる。グループ合成が必要なnormal等の隔離グループ、透明度1未満、マスク・クリッピング・効果・調整・未知の合成規則を持つグループは、グループを代替ラスタ化する。合成が外部の背景・兄弟へ依存するpass-through調整等は、影響先を含む祖先または文書全体へ代替範囲を広げる。未知の状態を安全に展開可能とは判定しない。
 
-originalMetadataには元のkind、位置、自己表示、opacity、blendMode等を保持する。importDispositionはRASTER、GROUP_METADATA、REPLACEMENT_RASTER、METADATA_ONLY、EMPTY_METADATAとし、描画対象はRASTERとREPLACEMENT_RASTERだけとする。これはAG-05のDTO提案であり、B内部では同じ区分で二重描画を防ぐ。
+originalMetadataには元のkind、位置、自己表示、opacity、blendMode等を保持する。importDispositionはRASTER、GROUP_METADATA、REPLACEMENT_RASTER、METADATA_ONLY、EMPTY_METADATAとし、描画対象はRASTERとREPLACEMENT_RASTERだけとする。この区分はA回答で採用された。AはeffectiveVisibleと描画用opacityを利用し、兄弟順から平坦な描画順へ変換する。effectiveOpacityを重ねて適用しない。
 
 調整レイヤーや描画モードが兄弟・下位レイヤーへ影響する場合は、安全に再現できる最小の祖先グループ全体を代替ラスタにする。範囲を分離できない場合は文書全体を代替合成する。代替画像に透明度や効果を焼き込んだ場合、描画用ノードopacityは1にし、元の属性は原ノードのメタデータへ残す。置換範囲の子孫はmetadataOnlyとして描画対象から除外する。
 
@@ -480,11 +490,11 @@ warning.code、元nodeId、元種別、非対応要素、適用した処置を�
 
 ### 実行上限とキャンセル
 
-以下のB内部の取消・期限管理は、共通の取消ハンドルをどの型で公開するかとは独立して実装する。
+公開ハンドルはAsyncOperationとし、詳細な状態遷移・競合・失敗完了は共通contract設計書3章を正本とする。B内部の期限とサーバー実行枠を、公開stageの完了状態と区別する。
 
 設計値：Javaの重い画像処理は1ワーカー、待機キュー2件。AIのモデル処理はPythonの1ワーカー、待機2件。PSD解析は別の1ワーカーにし、モデル操作と状態を共有しない。PSDの待機上限は1件。上限を超えた要求はBUSY。Executorを用途別に分け、HTTP完了待ちで画像演算のワーカーを占有しない。
 
-AはUIスレッドで対象ID・画像世代・パラメータを固定し、安定した入力スナップショットを渡す。Bはバックグラウンドで処理し、完了結果を返す。AはUIスレッドで対象の存在、世代一致、操作の取消状態を再確認してから適用する。別画像を開いた後の古い結果は破棄する。AIでは同一画像世代でもクリック列の更新で結果が古くなるため、最新requestIdとAIセッション一致も必須とする。このA側の適用条件はAG-02で合意する。
+AはUIスレッドで対象documentId/layerId・contentRevision・パラメータを固定し、安定した入力スナップショットを渡す。Bはバックグラウンドで処理し、完了結果を返す。AはUIスレッドで対象の存在、世代一致、操作の取消状態を再確認してから適用する。別画像を開いた後の古い結果は破棄する。AIでは同一画像世代でもクリック列の更新で結果が古くなるため、最新requestIdとAIセッション一致も必須とする。この適用条件はA回答のAG-02およびA詳細設計11・12章に従う。
 
 画像処理は協調取消。HTTP取消では未送信要求を除去し、送信済みなら接続待ちを中止して結果を適用しない。実行中のモデル演算を即座に中断できる保証は持たせず、完了まで処理枠を占有させる。タイムアウト後も連打で推論が無制限に増えないよう、サーバー側のキュー上限を適用する。
 
@@ -496,9 +506,9 @@ Pythonはリクエスト受付時に単調増加時計でdeadlineを設定する
 
 Bは変更範囲、geometryChanged、決定性、処理種別・パラメータ・algorithmVersionを渡す。Aは変更前データを最大256×256pxのタイルへ分割し、実データ量256MiBの履歴予算で管理する。BはCommandや履歴スタックを生成しない。
 
-同サイズの決定的処理は、Aが変更前タイルと演算パラメータを保持し、Redoで同じ版本の処理を再実行できる。回転・リサイズ・切り抜きは寸法変更を伴うため、Aが旧寸法と復元に必要な旧画像タイル群を保持する。タイル分割しても全面変更の総保存量が消えるわけではない。
+同サイズの決定的処理は、Aが変更前タイルと演算パラメータを保持し、Redoで同じ版本の処理を再実行できる。回転・リサイズ・切り抜き等で実際に寸法が変わる場合は、Aが旧寸法と復元に必要な旧画像タイル群を保持する。タイル分割しても全面変更の総保存量が消えるわけではない。
 
-AIレイヤー生成のUndoはAが新規レイヤーを削除する1操作。Redoでは保存済みの確定画像を再追加し、再推論しない。プレビュー、候補変更、失敗、取消、古い結果の破棄は履歴とdirtyを変更しない。メモリ不足時は結果を適用せず、Aへ処理失敗を通知する。
+AIレイヤー生成のUndoはAが新規レイヤーを削除する1操作。Redoでは保存済みの確定画像を再追加し、再推論しない。プレビュー、候補変更、失敗、取消、古い結果の破棄は履歴とdirtyを変更しない。単一操作の保持量が256MiBを超える場合はAが結果を適用せず、Undoなし強制適用は提供しない。Redo計算中はAが対象Documentの破壊的編集を一時ロックし、成功までredoStackから移動しない。メモリ不足・Redo失敗時もDocument・dirty・Historyを維持する。
 
 ### 4K処理とメモリ
 
@@ -506,7 +516,7 @@ AIレイヤー生成のUndoはAが新規レイヤーを削除する1操作。Red
 
 ## 14 単体とサービス結合テスト
 
-各ケースは入力、期待結果、判定根拠を固定する。JavaはJUnit相当、Pythonはpytest相当を候補とし、依存版はチームで固定する。HTTP異常系はモックで検証し、MobileSAMとpsd-toolsの実機テストを別に実施する。
+共通型・取消・所有権・寿命の追加試験C01～C08は共通contract設計書8章による。各ケースは入力、期待結果、判定根拠を固定する。JavaはJUnit 5へ統合し、Pythonは既存のunittestを維持する。依存の具体版はCatalog/lockで固定し、実環境の対応結果を記録する。HTTP異常系はモックで検証し、MobileSAMとpsd-toolsの実機テストを別に実施する。
 
 | IDと対象 | 入力または操作 | 期待結果 |
 | --- | --- | --- |
@@ -573,7 +583,11 @@ S04は不透明背景のないグループを合成してからグループ透�
 
 ### 相互レビューで固定する項目
 
-[担当Aとの合意事項](../coordination/担当Aとの合意事項.md)を正本とする。各項目にBの提案、Aに確認する点、合意前に進められる作業、完了条件を記載する。共通contractの変更は合意後に行い、本書の該当箇所と別紙の決定欄を同時更新する。Bのモデル配置・起動内部・例外変換は本書で具体化し、全体ビルドやAの呼出し方法だけを合意対象とする。
+A回答PDFが回答内容の正本、[共通contract設計書](共通contract設計書.md)がBの具体案、[移行・結合計画](../coordination/担当A回答を踏まえた移行・結合計画.md)が実施順の正本である。旧[担当Aとの合意事項](../coordination/担当Aとの合意事項.md)は送付時の依頼記録として保持する。
+
+残る確認はC1～C5（Aの既存コード、公開全署名、Python互換性、サービス寿命、初回日程）に絞る。A回答で定まった責務を再質問しない。月曜16:00～と翌火曜12:45～14:15の授業内相談は候補で、初回日付は未確定。Bが入力/期待結果/性能と環境、AがDocument/Layerを含むシナリオと結果記録を担当し、最終判定は共同とする。
+
+共通contract/build/依存/API/DTO変更は差分を用意して相互レビューする。integrationで共同結合、mainを安定版とし、Aの所有moduleを変更する場合は事前に相談する。過去の7週間の成果物表は相対的な段階を示すもので、2026年10月19日から新たに7週間を開始する予定ではない。
 
 第4週末でAI未統合ならPSD作業を止めAIのMUSTを優先する。第5週末で受入未達なら新機能を止め、両者で統合修正する。共有contractとビルド・依存変更は相互レビューを必須とする。
 
@@ -583,6 +597,8 @@ S04は不透明背景のないグループを合成してからグループ透�
 
 | 参照資料 | 使用箇所 |
 | --- | --- |
+| 合意事項_担当A回答.pdf | p1～2 公開型・取消・例外、p2～6 世代・AI・幾何編集・PSD・プレビュー・履歴、p6～8 環境・上限・結合 |
+| プログラミング言語_詳細設計_担当A.pdf | 2～4章 モジュール・寿命・世代、8～13章 A/Bの処理境界、14～16章 試験と運用 |
 | プログラミング言語_開発分担・進行計画案.pdf | p2～3 Bの責務と境界、p4～6 週次計画・結合・負荷再配分 |
 | プログラミング言語_概要設計書.pdf | p6～10 モジュール・AI候補、p11～13 PSDと非同期、p17～19 詳細設計残項目と確定差分 |
 | プログラミング言語_技術検証メモ.pdf | p4～7 ローカル接続・PSD・非同期、p10～12 技術スタックとPoC完了記録 |
