@@ -50,3 +50,7 @@ tmp/
 reports/
 .cache/
 .coverage.*
+
+# Candidate environments and local Gradle caches
+.venv-*/
+.gradle-user-home/

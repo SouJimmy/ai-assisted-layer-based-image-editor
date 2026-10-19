@@ -6,7 +6,7 @@
 
 作成日 2026年10月13日 / 更新日 2026年10月19日 / 対象 Version 1
 
-実装済み範囲・暫定API・検証済み環境は[実装状況](../implementation.md)を参照してください。本書のJava 21・Python 3.11方針や共通contractへの移行は未実装であり、記載だけで完了とは扱いません。実施順は[移行・結合計画](../coordination/担当A回答を踏まえた移行・結合計画.md)に従います。
+実装済み範囲・暫定API・検証済み環境は[実装状況](../implementation.md)を参照してください。Java 21・Python 3.11・共通contractへのB単独移行は実装済みです。Aの画面を通す共同受入と相互レビューは未完了であり、[移行実装記録](../contract-migration.md)で区別します。実施順は[移行・結合計画](../coordination/担当A回答を踏まえた移行・結合計画.md)に従います。
 
 ### 本書の目的
 
@@ -66,7 +66,7 @@ root/
   gradlew / gradlew.bat / gradle/wrapper/
 ```
 
-Javaは21、JavaFXは21系、Gradle Wrapperは8.10.2、Kotlin DSLとVersion Catalog、JUnit 5、Jackson 2.18系、Java標準HttpClientを用いる。JavaFX・Jackson・JUnitの正確なpatch版はAの既存Catalogを確認し、なければ具体案と検証結果を相互レビューして固定する。自動的なlatest選択はしない。
+Javaは21、JavaFXは21系、Gradle Wrapperは8.10.2、Kotlin DSLとVersion Catalog、JUnit 5、Jackson 2.18系、Java標準HttpClientを用いる。Jackson 2.18.12、JUnit 5.11.4をCatalogに固定してB側を検証した。JavaFXの具体patch版はAのeditor-app受領時に確認し、B側でUI依存を追加しない。自動的なlatest選択はしない。
 
 ルートパッケージはjp.ac.example.imageeditor。common-contractのcontract.processing / contract.ai / contract.psdを領域別の公開境界とし、共有のAsyncOperation・ErrorCode等はcontract.commonへ置く案とする。processing-backendの具体型と配置は[共通contract設計書2章](共通contract設計書.md)を正本とする。
 
@@ -340,7 +340,7 @@ HTTPの成功コードだけで成功判定しない。imageId、sourceRevision�
 
 ### 起動配置と実行方法
 
-アプリのJava/Gradle構成は2章、Python配置は以下とする。PythonはA指定の3.11系を移行先とし、具体版・全依存は別venvでの互換性検証後に固定する。現在の3.12.14用lockと環境は比較用に保持し、未検証のまま上書きしない。
+アプリのJava/Gradle構成は2章、Python配置は以下とする。Pythonは3.11.16を採用した。別venvで互換性・実推論とクリーン導入を検証してlockを更新し、旧3.12環境は開発端末でバックアップとして保持する。旧構成はGit履歴と旧評価記録から確認できる。
 
 ```text
 python-service/
@@ -376,7 +376,7 @@ Pythonはホストを127.0.0.1に固定し、ポート0でソケットをbindし
 {"event":"listening","apiVersion":1,"host":"127.0.0.1","port":49152,"pid":12345,"serviceInstanceId":"uuid"}
 ```
 
-Javaはプロセス開始から10秒以内に通知を待ち、最大8KiBの1行、event、API版、host、ポート1～65535、起動した子のPIDを検証する。不正通知・子終了・通知期限超過ではその子だけを停止しSERVICE_UNAVAILABLEとする。通信とモデル準備を混同せず、通知後に認証付きhealthを500ms間隔で確認する。起動通知の検証時点から60秒以内にAIが準備できなければAIを利用不可として通常編集を継続し、動作中のPSDサービスは停止しない。自動再起動ループは行わない。
+Javaはプロセス開始から10秒以内に通知を待ち、最大8KiBの1行、event、API版、host、ポート1～65535、起動した子のPIDを検証する。不正通知・子終了・通知期限超過ではその子だけを停止しSERVICE_UNAVAILABLEとする。通知直後のモデルimportでhealthが一時的に遅れる場合は1回2秒・全体10秒の有界照会で初期到達を確認する。通信とモデル準備を混同せず、通知後に認証付きhealthを500ms間隔で確認する。起動通知の検証時点から60秒以内にAIが準備できなければAIを利用不可として通常編集を継続し、動作中のPSDサービスは停止しない。自動再起動ループは行わない。
 
 ### LocalServiceManagerのライフサイクル
 

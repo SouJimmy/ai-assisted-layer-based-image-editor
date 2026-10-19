@@ -1,23 +1,21 @@
 # カバレッジ報告
 
-測定日 2026年10月13日
+測定日 2026年10月19日
 
 ## 測定結果
 
-| 対象 | 更新前の行 | 更新後の行 | 更新前の分岐 | 更新後の分岐 |
-| --- | --- | --- | --- | --- |
-| Java | 49.81% | 96.80% | 38.96% | 89.18% |
-| Python | 74.47% | 97.73% | 65.25% | 92.53% |
+| 対象 | 現在の行 | 現在の分岐 |
+| --- | --- | --- |
+| Java | 97.13% | 85.82% |
+| Python | 97.74% | 93.18% |
 
-更新前はmainの`07ea574`に対する従来テストの実測値です。更新後は追加テストと、そこで見つかったnull入力・サービス再起動の修正を含む実測値です。
+Java 21 / Python 3.11への移行版を2026年10月19日に測定しました。Javaはcommon-contractとprocessing-backendの両モジュール全本体を含みます。新API・Stub・寿命管理を含め、除外指定は追加していません。旧実行器の試験は新しい共通APIの取消/キュー試験へ置き換えました。
 
-Javaは従来の回帰テストに通信・PSD・起動管理・CLIの追加スイートを加えました。Pythonは13ケースから49ケースへ増やしました。数値はカバレッジであり、テストの実行回数やチェック数から推定した値ではありません。
-
-書式整理で複数の文を別行に分けたため、行数の分母も変わっています。重複していたCPU再試行テスト2件は、より詳しい既存テストへ統合しました。カバレッジ除外は追加していません。
+過去の移行前数値は履歴と[旧評価記録](validation/README.md)に残しています。ソース配置・Jacksonへの置換・新規接続層で計測対象が変わっており、旧値との単純な増減を品質の優劣とはしません。現在の[実測集計](validation/contract-migration-2026-10-19/coverage.json)を保存しています。
 
 ## 対象と計測方法
 
-- Java：`app/src/main/java/`の全クラス。JaCoCo 0.8.14で測定。テストのclassファイルは別ディレクトリに置き、分母に含めません。
+- Java：`common-contract/src/main/java/`と`processing-backend/src/main/java/`の全クラス。GradleとJaCoCo 0.8.14で測定。テストのclassファイルは別ディレクトリに置き、分母に含めません。
 - Python：`python-service/src/editor_helper/`の全モジュール。coverage.py 7.16.2のbranchモードで測定。エントリーポイントも含みます。
 - 本体の未通過コードをカバレッジ除外指定で隠していません。
 - PyTorch・MobileSAM・psd-tools等の外部依存そのもの、開発用の`tools/`スクリプト、未実装のA側コードはこの本体コード計測の対象外です。
@@ -25,11 +23,21 @@ Javaは従来の回帰テストに通信・PSD・起動管理・CLIの追加ス�
 
 ## Javaの領域別結果
 
-| パッケージ | 行 | 分岐 |
+| パッケージ（jp/ac/example/imageeditor以下） | 行 | 分岐 |
 | --- | --- | --- |
-| editor/integration | 96.40% | 87.16% |
-| editor/cli | 86.67% | 83.33% |
-| editor/processing | 98.35% | 94.51% |
+| internal/processing | 98.80% | 94.94% |
+| contract/psd | 100.00% | 100.00% |
+| contract/common | 100.00% | 100.00% |
+| integration/ai | 98.44% | 84.75% |
+| contract/processing | 100.00% | 100.00% |
+| processing | 97.83% | 75.00% |
+| integration/stub | 97.87% | 75.00% |
+| contract/ai | 100.00% | 100.00% |
+| internal/integration | 96.07% | 85.21% |
+| integration/shared | 100.00% | 91.67% |
+| integration/psd | 97.44% | 100.00% |
+| integration/runtime | 95.12% | 70.87% |
+| cli | 88.24% | 83.33% |
 
 ## 追加した主なテスト
 
@@ -48,7 +56,7 @@ Javaは従来の回帰テストに通信・PSD・起動管理・CLIの追加ス�
 python3 tools/coverage.py --check
 ```
 
-模擬HTTPサービスとPython子プロセスを起動するため、127.0.0.1のローカル通信が必要です。モデル重みは不要です。JaCoCoは初回取得時だけネットワークを使い、取得物のSHA-256を`tools/jacoco.json`で検証します。
+模擬HTTPサービスとPython子プロセスを起動するため、127.0.0.1のローカル通信が必要です。モデル重みは不要です。Gradle Wrapper配布物はSHA-256を検証し、Java依存とJaCoCoはGradleが固定版を解決します。初回だけネットワークを使います。
 
 生成先：
 

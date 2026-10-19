@@ -4,24 +4,24 @@ JavaとJavaFXによるデスクトップ画像編集ツールです。基本画�
 
 ## 開発状況
 
-担当Bの画像処理、AI・PSD用Pythonサービス、Javaのサービス連携、検証用CLIを実装しています。Javaの回帰テスト、Pythonのサービス・PSDテスト、Javaから実際に子サービスを起動したMobileSAM推論とPSD解析の結合確認を行っています。
+Bの画像処理・AI・PSDを共通contractへ接続しました。Java 21 / Gradle Wrapper 8.10.2、Python 3.11.16へ移行し、取消可能ハンドル、checked例外、型付きPSD DTO、サービス再起動と最終終了を実装しています。
 
-担当AのJavaFX画面・編集モデル・履歴・保存処理は未実装です。共通インターフェースはB側の暫定形であり、担当Aとの合意後に固定します。実装済み範囲と制限は[実装状況](docs/implementation.md)を参照してください。
+AのJavaFX画面・Document/History/保存のソースは本リポジトリにまだありません。共通APIから実モデルまでのB単独結合は検証し、Aの画面を通す受入は別途行います。[移行実装記録](docs/contract-migration.md)を参照してください。Aとの共通仕様の最終相互レビューは完了扱いにしていません。
 
 ## すぐに試す
 
-JDK 17以上とPython 3を用意し、画像処理を検証できます。
+JDK 21とPython 3.11を用意してください。
 
 ```sh
-python3 tools/build.py --test
-java -Djava.awt.headless=true -cp app/build/classes editor.cli.Main input.png gray.png GRAYSCALE
+./gradlew checkBackend
+./gradlew :processing-backend:cli -Pinput=input.png -Poutput=gray.png -Poperation=GRAYSCALE
 ```
 
-入力・出力の名前は自分の画像に置き換えてください。AI・PSDの依存導入、モデル配置、起動・結合テストは[開発と使い方](docs/usage.md)に記載しています。
+AI・PSDの依存導入、モデル取得、起動・試験の手順は[開発と使い方](docs/usage.md)に記載しています。
 
 ## ドキュメント
 
-2026年10月19日に担当Aの詳細設計と回答を受領しました。[移行・結合計画](docs/coordination/担当A回答を踏まえた移行・結合計画.md)に、現実装との差分と次の実施順をまとめています。B詳細設計を改訂し、[共通contract設計書](docs/design/共通contract設計書.md)で具体型・署名・取消等を定義しました。Java 21・共通contract等への実装移行はこれからです。
+2026年10月19日に担当Aの詳細設計と回答を受領しました。[移行・結合計画](docs/coordination/担当A回答を踏まえた移行・結合計画.md)に、現実装との差分と次の実施順をまとめています。B詳細設計を改訂し、[共通contract設計書](docs/design/共通contract設計書.md)で具体型・署名・取消等を定義しました。Java 21・共通contract・Python 3.11へのB単独移行を実施しました。
 
 | ドキュメント | 内容 |
 | --- | --- |
@@ -31,6 +31,7 @@ java -Djava.awt.headless=true -cp app/build/classes editor.cli.Main input.png gr
 | [担当B 詳細設計書](docs/design/担当B_詳細設計書.md) | 画像処理、AI通信、Pythonサービス、PSD取り込み、異常系、テスト仕様 |
 | [担当Aへの仕様確認と結合の相談](docs/coordination/担当Aとの合意事項.md) | 担当Aに確認する9項目、Bの提案、回答欄 |
 | [開発と使い方](docs/usage.md) | 環境構築、ビルド、画像加工、サービス起動、テスト |
+| [移行実装記録](docs/contract-migration.md) | 共通API・環境移行、検証結果、残る共同作業 |
 | [実装状況](docs/implementation.md) | 実装済み範囲、設計との差分、結合待ちの項目 |
 | [担当Bの完了状況](docs/b-completion-audit.md) | 未実装・合意待ち・品質や性能の評価待ち |
 | [コードの可読性とテストの確認](docs/code-review.md) | 読みやすさの改善、重複テストの整理、コードの案内 |
@@ -43,27 +44,16 @@ java -Djava.awt.headless=true -cp app/build/classes editor.cli.Main input.png gr
 
 ```text
 ai-assisted-layer-based-image-editor/
-├── README.md
-├── .gitignore
-├── tools/                        # ビルド・テスト・モデル取得の補助
-├── app/
-│   └── src/
-│       ├── main/java/             # Javaの画像処理・CLI・サービス連携
-│       └── test/java/             # Java回帰テストと実サービス結合確認
-├── python-service/
-│   ├── src/editor_helper/        # AI・PSDローカルサービス
-│   └── tests/                    # Pythonサービス・PSD・キャッシュのテスト
-└── docs/
-    ├── usage.md
-    ├── implementation.md
-    ├── design/
-    │   └── 担当B_詳細設計書.md
-    ├── coordination/
-    │   └── 担当Aとの合意事項.md
-    └── references/               # 設計の根拠となるPDF
+├── common-contract/     # JavaFX/Jackson非依存の公開APIとDTO
+├── processing-backend/  # Bの演算・HTTP・サービス寿命・CLI・JUnit
+├── editor-app/          # Aのソース受領・結合先（現在は配置枠のみ）
+├── python-service/      # AI・PSDローカルサービス
+├── gradle/              # WrapperとVersion Catalog
+├── gradlew
+├── settings.gradle.kts
+├── tools/               # Gradle呼出し・計測・環境検証の補助
+└── docs/                # 設計、使い方、評価、元PDF
 ```
-
-この配置は初期構成です。Javaのビルドツールと共通パッケージは担当Aと確認し、必要に応じて調整します。実装ファイルを追加したフォルダーの`.gitkeep`は削除しています。
 
 ## プロジェクト全体の開発範囲
 

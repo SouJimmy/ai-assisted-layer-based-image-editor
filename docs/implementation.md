@@ -1,53 +1,42 @@
 # 担当Bの実装状況
 
-2026年10月19日受領のA資料に基づく[移行・結合計画](coordination/担当A回答を踏まえた移行・結合計画.md)を追加しました。[B詳細設計](design/担当B_詳細設計書.md)と[共通contract設計書](design/共通contract設計書.md)を改訂しました。以下の暫定APIと検証済み環境は現実装の説明であり、A指定の共通contract・Java 21・Python 3.11へは未移行です。
-
-確認日 2026年10月13日
-
-性能・品質・環境再現の実測は[評価記録](validation/README.md)を参照してください。全項目の完了判定と残作業は[担当Bの実装完了状況](b-completion-audit.md)、行・分岐の計測結果は[カバレッジ報告](coverage.md)を参照してください。
+確認日：2026年10月19日。A回答に沿う共通API・環境移行の実装を反映しました。相互レビューの完了やAの実画面での受入とは区別します。
 
 ## 実装済み
 
-| 領域 | 実装と確認 |
+| 領域 | 現在の実装 |
 | --- | --- |
-| 画像処理 | Crop、左右90度回転、左右・上下反転、Resize、明るさ・コントラスト・彩度、グレースケール・セピア・ネガ、Gaussianぼかし、モザイク |
-| 画素の所有権 | TYPE_INT_ARGB_PRE、独立出力、半透明の補間、既定値の生画素保持 |
-| 非同期実行 | Javaの1ワーカー・待機2件、協調取消、進捗通知、キュー満杯の例外 |
-| Javaサービス連携 | 子プロセス起動・停止、動的ポート検証、health、認証、画像登録・推論・解放、PSD転送、応答上限と形式検証 |
-| Pythonサービス | FastAPI、API版と要求ID、共通エラー、単一モデルワーカー、PSD別ワーカー、処理期限、実行中枠の維持 |
-| AI | 公式MobileSAMの常駐、ウォームアップ、埋め込みキャッシュ、最大3候補、正負クリック、MPS優先とCPU再試行 |
-| PSD | 通常ラスタの位置・透明度・表示・順序・階層の抽出、RGBA ZIP、最小の安全なグループまたは文書全体への代替合成と警告 |
-| 開発用CLI | 画像を読み込み、Bの処理を適用し、別のPNGへ保存する入口 |
+| 公開API | common-contractのcontract.common / processing / ai / psd。JavaFX・Jackson・Aモデルへの依存なし |
+| ビルド | Java 21、Gradle Wrapper 8.10.2、Catalog、Jackson 2.18.12、JUnit 5.11.4 |
+| 画像処理 | DefaultImageProcessorの同期process・非同期submit。Crop/回転/反転/Resize/色/基本フィルター/ぼかし/モザイク |
+| 所有権と結果 | 独立ARGB_PRE、半透明の式・丸めを維持。operation/parameters/変更範囲/寸法変更/決定性/algorithmVersion |
+| 非同期 | 読取用stage、取消ハンドル、領域別checked例外、待機枠解放、取消後結果抑止 |
+| AI | 型付き登録・要求・候補・結果。起動instanceの検証、旧要求失効、取消後登録の解放、キャッシュの明示解放 |
+| PSD | 型付きPsdNode/資産/警告、深い不変metadata、未知warning保持、ZIP検証、返却補助ノード込み500件上限 |
+| 寿命管理 | 安定したAI/PSD facade、非同期start/restart、healthとモデル準備の分離、最終close、旧instance失効 |
+| ログ | 注入された保存先へ許可イベントのみを記録、5MiB×3世代。生stderr・Token・画像・クリック列は保存しない |
+| Stub | 手動で成功・失敗・取消・順序逆転を作れるStubBackend |
+| Python | 3.11.16。NumPy 2.3.5 / NetworkX 3.4.2で互換性を確認しlockを更新 |
+| 内部処理 | 検証済みの画素処理・HTTP/ZIP実装をinternalへ配置し、新しい公開境界から利用。独自JSONパーサーはJacksonへ置換 |
 
-## 確認済みの環境と結果
+PythonのMobileSAMコミット・重みSHA-256、HTTP API v1、PSD ZIP schemaVersion=1は維持しています。画像処理algorithmVersionはv1で、API移行だけによる演算式変更はありません。
 
-- Java：OpenJDK 17.0.19。画像処理等の回帰テスト1,397項目に加え、通信・PSD応答検証・子プロセス管理・CLIの追加スイートを通過。
-- Python：3.12.14。通常テスト49ケースを通過。
-- 実サービス結合：Java→Python→MobileSAMのMPS推論で候補3件、正負クリック補正、画像解放、PSD取り込みを確認。
-- 実モデル単体：CPU推論と、MPS失敗を1回注入した後の実CPU再推論で、いずれも候補3件を確認。
-- モデル重み：約40.7MB。SHA-256をmanifestで検証し、Gitには含めない。
-- GitHub Actionsの通常テスト設定を追加。クラウド上の実行結果はまだ未確認。
+## 確認済み
 
-テスト数は現在のテストコードに対応します。性能目標や切り抜き品質の受入合格を示す数値ではありません。
+- Java 21で共通型とB実装をビルドし、JUnitで既存の独立画素回帰・通信/PSD/プロセス境界と、新しい共通APIの試験を実行。
+- Python 3.11の通常試験、実MPS推論、実CPU推論、MPS例外後の実CPU再試行。
+- 共通API→所有子サービス→MobileSAMの候補取得・追加正負クリック・解放→型付きPSDの結合。
+- 新規Python 3.11環境で完全lockの導入、pip check、起動・実推論・終了の再現。
+- common-contractとprocessing-backendを含むJava全本体、Python全本体の行・分岐カバレッジ。
 
-## 現時点の制限
+具体値と再現手順は[移行実装記録](contract-migration.md)、[カバレッジ報告](coverage.md)、[開発と使い方](usage.md)を参照してください。
 
-- 担当AのJavaFX画面、Document、Layer、History、通常画像入出力は実装していません。CLIはB側の検証用です。
-- Javaの型は`editor.processing`・`editor.integration`内のB側の暫定実装です。[担当Aへの確認事項](coordination/担当Aとの合意事項.md)の合意後、共通contractとして固定します。合意済みとは扱いません。
-- PSDの複雑なグループ・マスク・調整・効果・非標準描画モードは、背景から独立する最小のnormalグループで合成します。外側の背景へ依存する場合は祖先または文書全体へ広げます。元の階層をメタデータに保持し、個別編集できなくなる範囲を警告します。実PSDでの互換性評価は継続が必要です。
-- JavaのPSDノードと警告は変更不可のMapを用いた中間形式です。フィールド型を固定した共通DTOへの移行はAG-05の確認後に行います。
-- ぼかしは横方向の計算結果を行リングバッファへ保持し、縦方向と逐次処理する実装です。進捗は完了出力行数から0～100%で通知します。
-- 起動管理はHTTP受付とhealthまでを確認します。AIの準備待ちは呼出し側がhealthのaiReadyとaiErrorで判定します。起動処理をUIスレッドで呼ばないでください。
-- 実推論の結合確認は合成図形、品質の初期評価は人物・猫・カップの実写真で行っています。輪郭欠け・背景混入が残るため、より多様な写真と担当AのUIを通した受入は別途必要です。
+## 残る共同作業と制限
 
-## 検証方法
+AのJavaFXアプリ・Coordinator・Document/Layer/History・保存コードはまだ本リポジトリにありません。editor-appは配置枠のみです。Aの画面からの接続、世代/sessionの最終確認、履歴・dirty、PSD警告UIと.jimg保存を含むI01～I05は共同結合後に確認します。
 
-[開発と使い方](usage.md)のコマンドで再現できます。通常テストはAI重みをロードせず、固定バックエンドでAPIとキャッシュ・異常系を検証します。`--integration`はJavaから実際に子サービスを起動し、MobileSAMの推論・追加正負クリック・画像解放・PSD取り込みを実行します。
+共通APIの具体署名・補助型・ノード上限の数え方等は[追加確認事項](coordination/共通contract具体案の確認事項.md)としてAとの相互レビュー待ちです。実装済みという理由でAも採用済みとは扱いません。GitHub上のCI実行結果も未確認です。
 
-画像処理は独立した2次元畳み込みとの比較、半透明の期待画素、幾何変換の逆操作、不正入力・取消で検証します。PSDはテスト内で生成した通常レイヤー・透明度付きグループを読み込み、画素と属性を確認します。
+PSDは安全な最小normalグループで代替合成し、背景依存時は祖先または文書全体へ広げます。原情報を残したまま補助ノードを追加して500件を超える場合はRESOURCE_LIMITです。Photoshop由来の調整・効果等を含む多様な実PSDでの互換性受入は継続課題です。
 
-## 公式の参照先
-
-- [MobileSAM](https://github.com/ChaoningZhang/MobileSAM)：採用コードのコミットはrequirements.lockとモデルmanifestへ記録しています。
-- [psd-toolsのレイヤーAPI](https://psd-tools.readthedocs.io/en/latest/reference/psd_tools.api.layers.html)：抽出と合成のAPI。
-- [FastAPIのLifespan](https://fastapi.tiangolo.com/advanced/events/)：サービスの初期化と終了。
+実写真3例では輪郭欠け・背景混入が残ります。より多様な写真・正解マスクでの品質評価、数時間の運用、別評価PCでの再現は未完了です。過去の[評価記録](validation/README.md)は測定時のJava 17 / Python 3.12環境の結果として保持しています。

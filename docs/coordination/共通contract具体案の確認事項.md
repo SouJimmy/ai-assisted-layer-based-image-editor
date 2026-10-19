@@ -2,9 +2,9 @@
 
 担当Bから担当Aへ / 2026年10月19日 / Version 1
 
-詳細設計とAG-01～09の回答をありがとうございます。回答に合わせて[担当B詳細設計](../design/担当B_詳細設計書.md)を改訂し、[共通contract設計書](../design/共通contract設計書.md)に型・署名・取消等を具体化しました。Java 21、モジュール構成、A/Bの責務、UI/履歴/PSD保存方針は回答に沿っています。
+詳細設計とAG-01～09の回答をありがとうございます。回答に合わせて[担当B詳細設計](../design/担当B_詳細設計書.md)を改訂し、[共通contract設計書](../design/共通contract設計書.md)に型・署名・取消等を具体化し、共通型・B接続層・Stubを実装しました。Java 21、モジュール構成、A/Bの責務、UI/履歴/PSD保存方針は回答に沿っています。
 
-以下は回答にない部分をBで具体化した案です。共通コードへ反映する前に、この案で接続できるかを確認したいです。既存のcommon-contract、Gradle/Catalog、Stubがある場合は、参照するbranch/commitを教えてください。重複実装を作らず合わせます。
+以下は回答にない部分をBで具体化した案です。B側ではこの案の実装と単独結合を検証しました。A側へ接続する前に、この案で接続できるかを確認したいです。既存のcommon-contract、Gradle/Catalog、Stubがある場合は、参照するbranch/commitを教えてください。重複実装を作らず合わせます。
 
 | 項目 | Bの具体案 | 確認をお願いします |
 | --- | --- | --- |
@@ -15,7 +15,7 @@
 | PSD | 型付きPsdNode/ImportWarning、元属性はJackson非依存のMetadataValue、未知warningは内容を保持 | PsdImportMetadata/.jimg保存へ欠落なく変換できるか |
 | ノード上限 | 補助ノードを含む返却数を500までとする保守的解釈 | AG-09の500件が元PSDだけか返却数も含むか。元500＋補助1を許す場合は双方で上限を明記したい |
 | サービス寿命 | start成功はHTTP確認まで、AI準備は別監視。restartと最終closeを分離し、closeで全資源を解放 | Aの起動・終了処理と合うか。起動例外ServiceLifecycleExceptionはBのruntime型として追加 |
-| Python | 指定の3.11系を別venvで検証し、具体版とlockをBで提示 | 検証不成立時は根拠を示して3.12維持案を相談する。現時点では3.11対応は未完了 |
+| Python | 指定の3.11系を別venvで検証し、具体版とlockをBで提示 | 検証不成立時は根拠を示して3.12維持案を相談する。3.11.16で通常試験・MPS/CPU・fallback・クリーン導入を検証済み |
 
 DTOのrecord・Optional等はJava内の表現です。HTTP API v1・PSD ZIP schemaVersion=1は維持し、Java recordの直列化結果をそのまま通信仕様へ置き換えません。画像の独立所有権とList等の防御的コピーも規約へ含めています。
 

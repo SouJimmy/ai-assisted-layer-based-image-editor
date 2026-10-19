@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "editor-helper"
 version = "0.1.0"
 description = "Local AI segmentation and PSD import service"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.11,<3.12"
 dependencies = ["fastapi", "uvicorn", "python-multipart", "pillow", "numpy", "psd-tools"]
 
 [project.optional-dependencies]
@@ -18,7 +18,7 @@ where = ["src"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["F401", "F841", "I"]

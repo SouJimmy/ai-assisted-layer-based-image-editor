@@ -6,7 +6,7 @@
 
 [担当A回答](../references/合意事項_担当A回答.pdf)のAG-01～09と[担当A詳細設計](../references/プログラミング言語_詳細設計_担当A.pdf)を基準に、公開APIを具体化します。Java 21、record、AsyncOperation、checked例外、JavaFX非依存はA回答に沿う方針です。本書で追加したメソッド署名、共有補助型の配置、取消の競合規則はBの具体案であり、双方の採用確認前に合意済みとは扱いません。
 
-本書が改訂後の共通型の設計正本、[担当B詳細設計](担当B_詳細設計書.md)が処理式・HTTP・資源制限の設計正本です。現コードのProcessingネスト型・HelperClientネスト型は移行元であり、本書のAPIが実装済みという意味ではありません。
+本書が改訂後の共通型の設計正本、[担当B詳細設計](担当B_詳細設計書.md)が処理式・HTTP・資源制限の設計正本です。本書の共通APIとB接続層は実装済みで、Processing/HelperClientの旧型はinternalの演算・通信境界に閉じ込めています。詳細は[移行実装記録](../contract-migration.md)を参照してください。Aの画面との結合と最終相互レビューは未完了です。
 
 ## 2. モジュールと型配置
 
@@ -186,7 +186,7 @@ MetadataObject(Map<String, MetadataValue> values)
 
 schemaVersion=1。Java recordのOptionalはJava内の表現で、Jacksonによるrecordの丸ごと自動直列化をHTTP/.jimgの仕様にしません。通信DTOから明示的に変換し、parentIdはnull、省略されたassetIdはOptional.emptyへ正規化します。描画用assetIdは必須、metadata専用ノードは空。Pythonが現在metadataノードのassetIdをnullとして出す場合も、省略と同義として受理します。
 
-A回答の500ノード上限を安全側に解釈し、返却nodesも補助的な代替ノードを含め最大500とします。入力が上限内でも、元情報を保持したまま代替ノードを追加すると上限を超える場合はRESOURCE_LIMITとし、黙って元ノードを捨てません。この数え方は相互レビューで確認します。現実装のJava側にある501件許容も移行時の修正対象です。合成ノードは元ノードと異なるIDを持ち、元ノードはMETADATA_ONLYです。各parent内のsiblingIndexを保持して深さ優先に下から上へたどると描画順が得られる構成にし、Aは親のない置換ノードも含めて同じ規則で平坦化します。
+A回答の500ノード上限を安全側に解釈し、返却nodesも補助的な代替ノードを含め最大500とします。入力が上限内でも、元情報を保持したまま代替ノードを追加すると上限を超える場合はRESOURCE_LIMITとし、黙って元ノードを捨てません。この数え方は相互レビューで確認します。Java/Pythonの双方をこの上限へ修正し、501件拒否の回帰試験を追加しました。合成ノードは元ノードと異なるIDを持ち、元ノードはMETADATA_ONLYです。各parent内のsiblingIndexを保持して深さ優先に下から上へたどると描画順が得られる構成にし、Aは親のない置換ノードも含めて同じ規則で平坦化します。
 
 rasterAssetsのキーとRasterAsset.assetIdは一致が必要です。描画nodeと資産の寸法一致、ID・親・兄弟順の一意性、親循環、opacityの範囲、資産未参照、容量上限を検証してから結果を公開します。元階層と描画用置換の情報を保ち、AがimportIdを発行してPsdOrigin・PsdImportMetadataへ登録します。型付きDTO化だけではPythonのschemaVersionを上げません。
 
@@ -211,7 +211,7 @@ ServiceStatusはServiceState、Optional<String> serviceInstanceId、boolean aiRe
 
 - startは同一設定のRUNNINGなら成功済みハンドルを返し、STARTING/STOPPING中の再呼出しはBUSYとします。未完了startのcancelは未公開の子を停止し、遅れてRUNNINGを公開しません。異なる設定での二重startはINVALID_ARGUMENT、CLOSEDはSERVICE_UNAVAILABLEで失敗完了。
 - aiService()/psdService()は安定したfacadeを返し、再起動でinstanceを切り替えます。RUNNING前やCLOSEDでの要求は失敗完了します。古いRegisteredImageは新instanceへ引き継ぎません。
-- startの成功は、10秒以内の起動通知検証と2秒期限の認証付きhealth成功までです。AI準備を60秒同期的に待ちません。AI監視は通知を検証した時点から60秒、500ms間隔でhealthを照会しstatusへ反映します。準備監視TIMEOUTだけで生きているPSDサービスを停止しません。その後も明示的な状態更新で遅れて準備できたAIを利用できます。
+- startの成功は、10秒以内の起動通知検証と認証付きhealth成功までです。healthは1回2秒、モデルimport時の一時的な期限超過に限り全体10秒の有界照会を行います。AI準備を60秒同期的に待ちません。AI監視は通知を検証した時点から60秒、500ms間隔でhealthを照会しstatusへ反映します。準備監視TIMEOUTだけで生きているPSDサービスを停止しません。その後も明示的な状態更新で遅れて準備できたAIを利用できます。
 - AI初期化失敗はaiErrorへ保持し、psdReady=trueならRUNNINGを維持します。子終了や認証・instance不一致はFAILEDとし未完了要求を失敗させます。無制限の自動再起動は行いません。
 - restartは未完了要求・旧IDを失効させ、所有子を停止して新instanceを起動します。restart自体の取消はその起動世代を失効させ、後からRUNNINGを公開せず、新たに起動した子も回収します。停止中の新規処理要求はSERVICE_UNAVAILABLE、同時restartはBUSYとします。
 - closeは最終終了で冪等です。受付停止、要求のCANCELLED完了、所有子へのdestroy、5秒猶予後のdestroyForcibly、reader/HTTP/executorの停止と参照解放を行います。強制終了後の終了確認は追加5秒を上限とし、失敗を安全な診断ログへ残します。CLOSEDから再起動しません。
@@ -220,7 +220,7 @@ ServiceStatusはServiceState、Optional<String> serviceInstanceId、boolean aiRe
 
 ## 8. レビューと実装の完了条件
 
-A回答にない具体署名・補助型・runtime規約は、本書を用いて相互確認します。既存Aコードがある場合は重複する共通型を作らず本書を更新します。Python 3.11の正確な版・lockとJackson等のpatch版は互換性試験とVersion Catalogのレビュー後に固定します。
+A回答にない具体署名・補助型・runtime規約は、本書を用いて相互確認します。既存Aコードがある場合は重複する共通型を作らず本書を更新します。Python 3.11.16とlock、Jackson 2.18.12等をB側で検証し固定しました。Aとの最終相互レビュー・アプリ結合は残っています。
 
 | ID | 検証 |
 | --- | --- |

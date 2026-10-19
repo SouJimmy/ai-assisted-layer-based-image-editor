@@ -28,18 +28,8 @@ if "--integration" in sys.argv:
         cwd=ROOT,
         check=True,
     )
+    from java_env import environment, gradle
+
     subprocess.run(
-        [
-            "java",
-            "-Djava.awt.headless=true",
-            "-cp",
-            os.pathsep.join(
-                map(str, [ROOT / "app/build/classes", ROOT / "app/build/test-classes"])
-            ),
-            "editor.IntegrationSmoke",
-            str(ROOT / "python-service"),
-            str(ROOT / "tmp/smoke.psd"),
-        ],
-        cwd=ROOT,
-        check=True,
+        gradle(":processing-backend:integrationSmoke"), cwd=ROOT, env=environment(), check=True
     )
