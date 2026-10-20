@@ -1,32 +1,44 @@
 # コードの可読性とテストの確認
 
-確認日：2026年10月13日
+確認日：2026年10月20日
 
-## 確認結果と対応
+## 確認結果
 
-第三者が追いにくい主な箇所は、同じ行に複数の処理を詰めた書式、役割の異なる処理を持つクラス、意味の読み取りにくい変数名でした。Java・Pythonの書式を統一し、画像処理の内部メソッドと変数名を具体化しました。PSDアーカイブの検証、PNGの検証、Pythonの実行キューをそれぞれ専用のファイルへ分けています。公開APIは維持しています。
+公開API、Java側の画像処理・AI通信・PSD変換・起動管理、Python側のキュー・キャッシュ・モデル接続・PSD抽出を確認しました。責務ごとの配置と書式は概ね整理されています。同名の内部実装と公開窓口があるため、下の案内ではモジュールとパッケージを区別しています。
 
-コメントの量自体は過剰ではありませんでした。画素の所有権、半透明の扱い、期限や取消、ぼかしの行バッファなど、実装理由を説明するコメントは残しています。キャッシュのスレッド利用と、待機中ジョブの取消について、実装と食い違う説明2箇所を修正しました。未使用のimport・変数と、使われていないサービス内部状態も整理しました。
+非同期処理では、完了通知が呼び出し元の処理をその場で実行することに注意が必要です。OperationPromise、サービス起動、AI要求の失効、Stubの終了で、ロックを保持したまま通知していた箇所を修正しました。コールバックが別スレッド経由で同じサービスを利用すると、互いの終了を待つ可能性がありました。
 
-CPU再試行について重複していた弱いテスト2件は、呼出し回数・デバイス・例外を検証する既存テストへ統合しました。キャッシュ容量のテストは内部計算関数の直接検証から、登録の成功・失敗を確認する形へ変更しました。共通の代替バックエンドを専用ファイルへ移し、テスト同士のimportも解消しました。
-
-入力検証、通信契約、取消と期限、PSDの安全な取り込み、独立した計算による画像処理の期待値確認は残しています。異なる境界で同じ不正入力を試すテストは、各境界の責務を確認するために必要です。テスト数だけを目的にした追加やカバレッジ除外は行っていません。
+結果の決定と通知を分離し、成功・失敗・取消のうち一つだけを確定します。AIでは旧要求の除去と新要求の受付順序をロックで保護し、旧要求の取消通知はロックを解放してから実行します。コメントはこの理由を説明する箇所に限定しました。
 
 ## コードを読む順序
 
-| 目的 | 入口 |
-| --- | --- |
-| 画像処理の契約と実装 | `Processing.java` → `ImageProcessor.java` → `Filters.java` |
-| Javaからサービスを利用 | `LocalServiceManager.java` → `HelperClient.java` |
-| 受信した画像・PSDの検証 | `PngDecoder.java`、`PsdArchiveReader.java` |
-| PythonのHTTP処理 | `api.py` → `work_queue.py` |
-| モデルとキャッシュ | `model_runtime.py`、`image_cache.py` |
-| PSDの抽出と代替合成 | `psd_importer.py` |
+Javaのパッケージ名は `jp.ac.example.imageeditor` からの相対名です。
 
-Javaのファイルは移行後の`processing-backend/src/main/java/jp/ac/example/imageeditor/`と`common-contract/src/main/java/jp/ac/example/imageeditor/`、Pythonのファイルは`python-service/src/editor_helper/`にあります。Javaの`ContractTests`は通信・起動管理等の契約検証であり、カバレッジ値のためだけのテストではありません。
+| 目的 | 入口と読む順序 |
+| --- | --- |
+| 公開契約 | `common-contract` の `contract.processing` / `contract.ai` / `contract.psd`。非同期ハンドルとエラーは `contract.common` |
+| 画像処理 | `processing-backend` の `processing.DefaultImageProcessor` → `internal.processing.ImageProcessor` → `Processing` / `Filters` |
+| AI通信 | `integration.ai.HttpAiSegmentationService` → `internal.integration.HelperClient`。公開DTOへの変換、起動世代、旧要求失効は前者、HTTPと応答検証は後者 |
+| PSD通信と変換 | `integration.psd.HttpPsdImportService` → `internal.integration.HelperClient` → `PsdArchiveReader` / `PngDecoder` |
+| 起動・停止 | `integration.runtime.LocalServiceManager` → `internal.integration.LocalServiceManager`。前者は公開状態と非同期の寿命管理、後者は子プロセス・通知・HTTP接続の所有者 |
+| 非同期の結果決定 | `integration.shared.OperationPromise`。完了と取消の勝者を決め、ロックの外で通知 |
+| UI結合用の代替実装 | `integration.stub.StubBackend`。テスト側で成功・失敗・取消・応答順序を制御 |
+| PythonのHTTP処理 | `python-service/src/editor_helper/api.py` → `work_queue.py` |
+| モデルとキャッシュ | `model_runtime.py`、`image_cache.py`。通常の操作は単一worker、削除印だけはAPI側からロックで保護して更新 |
+| PSDの抽出と代替合成 | `psd_importer.py`。ノード収集 → 安全な合成範囲の決定 → 資産抽出 → ZIP生成 |
+
+JavaFXの画面・編集モデル・履歴はA側の担当です。本リポジトリの `editor-app` は配置枠であり、Bのコードを読む際の起点にはしません。
+
+## テストとコメントの判断
+
+画素処理の独立した期待値、通信契約、取消・期限、PSDの安全な取り込みを検証するテストは維持しています。既存の `LegacyRegressionTest` は多数の独立した画素・通信検証をJUnitから実行する窓口です。公開APIのテストと確認する境界が異なるため、重複として削除していません。
+
+今回追加した回帰テストは、通知時にロックを保持しないこと、起動完了の通知から別スレッド経由で管理クラスを利用できること、AIの明示失効と新要求による置換、Stub終了を対象とします。成功・失敗・取消を100回競合させ、一つだけが勝つことも確認します。未設定・終了後のrestartは既存の寿命管理テストに統合し、同じ確認だけを繰り返す別テストは作っていません。
+
+画像の所有権、半透明の計算、期限切れ後の実行枠、PSDの代替合成など、理由を伝えるコメントは必要です。今回確認した範囲に、大量の不要コメントや削除すべきテストは見つかりませんでした。単なる行数削減のための再分割やカバレッジ除外は行っていません。
 
 ## 検証と残る境界
 
-Javaの回帰テスト1,397項目、契約テスト226項目、Pythonの44ケースを通過しました。実モデルのMPS推論で候補3件、正負クリック補正、画像解放、PSD取り込みの結合テストも通過しました。カバレッジは[計測結果](coverage.md)、再現コマンドと書式チェックは[開発と使い方](usage.md)を参照してください。
+全本体の行・分岐カバレッジ、テストの結果と再現手順は[カバレッジ報告](coverage.md)を参照してください。カバレッジの数値はモデルの認識精度やPSD完全互換を保証しません。
 
-PSDの公開ノードは移行時に型付きDTOへ変更しました。Aの保存情報へ変換する共同確認は残っています。独自JSON実装は移行時にJacksonへ置き換え、同じ通信境界の検証を維持しました。
+PSD単体と実モデルの資源測定は[資源評価](validation/resources-2026-10-20/README.md)に記録しています。Photoshop由来の実PSD、多様な写真と正解マスク、数時間の運用、別PCでの再現、Aの実画面を通す受入は引き続き確認が必要です。

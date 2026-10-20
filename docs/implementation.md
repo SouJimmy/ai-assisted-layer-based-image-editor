@@ -1,6 +1,6 @@
 # 担当Bの実装状況
 
-確認日：2026年10月19日。A回答に沿う共通API・環境移行の実装を反映しました。相互レビューの完了やAの実画面での受入とは区別します。
+確認日：2026年10月20日。A回答に沿う共通API・環境移行の実装を反映しました。相互レビューの完了やAの実画面での受入とは区別します。
 
 ## 実装済み
 
@@ -30,6 +30,9 @@ PythonのMobileSAMコミット・重みSHA-256、HTTP API v1、PSD ZIP schemaVer
 - common-contractとprocessing-backendを含むJava全本体、Python全本体の行・分岐カバレッジ。
 
 具体値と再現手順は[移行実装記録](contract-migration.md)、[カバレッジ報告](coverage.md)、[開発と使い方](usage.md)を参照してください。
+
+- 非同期通知をロック外へ移し、再入・別スレッドからの利用・要求置換と取消競合を回帰検証。
+- PSDの独立プロセスでの最大RSSと実MPS推論100回の資源を[追加測定](validation/resources-2026-10-20/README.md)。
 
 ## 残る共同作業と制限
 

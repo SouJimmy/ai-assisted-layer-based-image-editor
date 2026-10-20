@@ -455,4 +455,127 @@ class MigrationBoundaryTest {
             assertEquals(value, Failures.psd(wire).retryable());
         }
     }
+
+    @Test
+    void startupCallbackCanWaitForAnotherThreadUsingTheManager() throws Exception {
+        Path dir = Files.createTempDirectory("runtime-callback-");
+        var config = fake(dir, "'device':'cpu','aiReady':True", "normal");
+        Path script = dir.resolve("src/editor_helper.py");
+        Files.writeString(
+                script,
+                Files.readString(script)
+                        .replace("print(json.dumps", "time.sleep(0.3)\nprint(json.dumps"));
+        try (var manager = new jp.ac.example.imageeditor.integration.runtime.LocalServiceManager();
+                var caller = Executors.newSingleThreadExecutor()) {
+            var callback =
+                    manager.start(config)
+                            .stage()
+                            .thenApply(
+                                    status -> {
+                                        try {
+                                            return caller.submit(() -> get(manager.start(config)))
+                                                    .get(2, TimeUnit.SECONDS);
+                                        } catch (Exception e) {
+                                            throw new CompletionException(e);
+                                        }
+                                    });
+            assertEquals(
+                    ServiceState.RUNNING,
+                    callback.toCompletableFuture().get(10, TimeUnit.SECONDS).state());
+        }
+    }
+
+    @Test
+    void aiInvalidationAndSupersessionNotifyOutsideTheFacadeLock() throws Exception {
+        for (boolean supersede : List.of(false, true)) {
+            try (var server = new ContractTests.Server();
+                    var client = server.client()) {
+                var ai = new HttpAiSegmentationService(() -> client, () -> server.instance);
+                var image = get(ai.registerImage(ContractTests.image(), "r"));
+                var entered = new CountDownLatch(1);
+                var release = new CountDownLatch(1);
+                server.handler =
+                        event -> {
+                            entered.countDown();
+                            try {
+                                release.await(5, TimeUnit.SECONDS);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            }
+                            return server.normal(event);
+                        };
+                try {
+                    var request =
+                            new AiRequest(
+                                    image,
+                                    UUID.randomUUID(),
+                                    List.of(new PromptPoint(0, 0, PromptLabel.POSITIVE)));
+                    var first = ai.segment(request);
+                    assertTrue(entered.await(2, TimeUnit.SECONDS));
+                    var callback = first.stage().handle((value, error) -> Thread.holdsLock(ai));
+                    if (supersede) {
+                        var next =
+                                ai.segment(
+                                        new AiRequest(image, UUID.randomUUID(), request.points()));
+                        next.cancel();
+                    } else ai.invalidateRequests(image);
+                    assertFalse(callback.toCompletableFuture().get(2, TimeUnit.SECONDS));
+                    assertEquals(ErrorCode.CANCELLED, error(first).code());
+                } finally {
+                    release.countDown();
+                }
+            }
+        }
+    }
+
+    @Test
+    void stubCloseNotifiesOutsideTheStubLock() throws Exception {
+        try (var stub = new StubBackend()) {
+            var operation = stub.registerImage(ContractTests.image(), "r");
+            var callback = operation.stage().handle((value, error) -> Thread.holdsLock(stub));
+            stub.close();
+            assertFalse(callback.toCompletableFuture().get(1, TimeUnit.SECONDS));
+            assertEquals(ErrorCode.CANCELLED, error(operation).code());
+            assertNull(stub.take(1, TimeUnit.MILLISECONDS));
+        }
+    }
+
+    @Test
+    void requestSubmittedByCancellationCallbackRemainsTheNewest() throws Exception {
+        try (var server = new ContractTests.Server();
+                var client = server.client()) {
+            var ai = new HttpAiSegmentationService(() -> client, () -> server.instance);
+            var image = get(ai.registerImage(ContractTests.image(), "r"));
+            var entered = new CountDownLatch(1);
+            var release = new CountDownLatch(1);
+            server.handler =
+                    event -> {
+                        entered.countDown();
+                        try {
+                            release.await(5, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                        return server.normal(event);
+                    };
+            try {
+                var points = List.of(new PromptPoint(0, 0, PromptLabel.POSITIVE));
+                var first = ai.segment(new AiRequest(image, UUID.randomUUID(), points));
+                assertTrue(entered.await(2, TimeUnit.SECONDS));
+                var newestId = UUID.randomUUID();
+                var callback =
+                        first.stage()
+                                .handle(
+                                        (value, error) ->
+                                                ai.segment(new AiRequest(image, newestId, points)));
+                var second = ai.segment(new AiRequest(image, UUID.randomUUID(), points));
+                assertEquals(ErrorCode.CANCELLED, error(second).code());
+                release.countDown();
+                var newest = callback.toCompletableFuture().get(2, TimeUnit.SECONDS);
+                assertEquals(newestId, get(newest).requestId());
+            } finally {
+                release.countDown();
+            }
+        }
+    }
 }

@@ -165,13 +165,16 @@ public final class LocalServiceManager implements AutoCloseable {
                             config.serviceDirectory(),
                             config.modelManifest());
             Map<String, Object> health = connection.health().get(3, TimeUnit.SECONDS);
+            ServiceStatus started;
             synchronized (lock) {
                 if (generation.get() != epoch || result.isCancelled()) return;
                 client = connection;
                 readyDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
-                status = fromHealth(health);
-                result.succeed(status);
+                started = fromHealth(health);
+                status = started;
             }
+            // Completion can run application callbacks; never hold the lifecycle lock here.
+            result.succeed(started);
             diagnostic("SERVICE_STARTED");
         } catch (Exception e) {
             synchronized (lock) {

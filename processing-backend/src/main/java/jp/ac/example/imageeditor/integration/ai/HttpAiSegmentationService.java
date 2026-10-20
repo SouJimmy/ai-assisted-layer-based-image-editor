@@ -69,25 +69,32 @@ public final class HttpAiSegmentationService implements AiSegmentationService {
     }
 
     @Override
-    public synchronized AsyncOperation<AiMaskResult> segment(AiRequest request) {
+    public AsyncOperation<AiMaskResult> segment(AiRequest request) {
         OperationPromise<AiMaskResult> result = operation();
         if (request == null) {
             result.fail(new AiServiceException(ErrorCode.INVALID_ARGUMENT, "要求がありません", null));
             return result;
         }
         RegisteredImage image = request.image();
-        String instance = instances.get();
-        HelperClient client = clients.get();
-        if (client == null || instance == null) {
-            result.fail(unavailable());
-            return result;
+        String instance;
+        HelperClient client;
+        Set<OperationPromise<AiMaskResult>> superseded;
+        synchronized (this) {
+            instance = instances.get();
+            client = clients.get();
+            if (client == null || instance == null) {
+                result.fail(unavailable());
+                return result;
+            }
+            if (!instance.equals(image.serviceInstanceId())) {
+                result.fail(
+                        new AiServiceException(ErrorCode.IMAGE_NOT_FOUND, "画像を再登録してください", null));
+                return result;
+            }
+            superseded = requests.remove(image);
+            client.cancelSegmentation(image.imageId());
+            requests.computeIfAbsent(image, key -> ConcurrentHashMap.newKeySet()).add(result);
         }
-        if (!instance.equals(image.serviceInstanceId())) {
-            result.fail(new AiServiceException(ErrorCode.IMAGE_NOT_FOUND, "画像を再登録してください", null));
-            return result;
-        }
-        invalidateRequests(image);
-        requests.computeIfAbsent(image, key -> ConcurrentHashMap.newKeySet()).add(result);
         result.stage()
                 .whenComplete(
                         (value, error) ->
@@ -97,6 +104,8 @@ public final class HttpAiSegmentationService implements AiSegmentationService {
                                             set.remove(result);
                                             return set.isEmpty() ? null : set;
                                         }));
+        // Free superseded work before submitting, without calling application code under the lock.
+        cancel(superseded);
         List<HelperClient.Point> points =
                 request.points().stream()
                         .map(
@@ -106,12 +115,23 @@ public final class HttpAiSegmentationService implements AiSegmentationService {
                                                 p.y(),
                                                 p.label() == PromptLabel.POSITIVE ? 1 : 0))
                         .toList();
-        var future =
-                client.segment(
-                        image.imageId(),
-                        image.sourceRevision(),
-                        request.requestId().toString(),
-                        points);
+        CompletableFuture<HelperClient.Segmentation> future;
+        synchronized (this) {
+            var admitted = requests.get(image);
+            // A reentrant callback or concurrent admission may already have replaced this request.
+            future =
+                    admitted != null && admitted.contains(result)
+                            ? client.segment(
+                                    image.imageId(),
+                                    image.sourceRevision(),
+                                    request.requestId().toString(),
+                                    points)
+                            : null;
+        }
+        if (future == null) {
+            result.cancel();
+            return result;
+        }
         result.onCancel(() -> future.cancel(true));
         future.whenComplete(
                 (value, error) -> {
@@ -162,13 +182,20 @@ public final class HttpAiSegmentationService implements AiSegmentationService {
     }
 
     @Override
-    public synchronized void invalidateRequests(RegisteredImage image) {
+    public void invalidateRequests(RegisteredImage image) {
         if (image == null) return;
-        var pending = requests.remove(image);
+        Set<OperationPromise<AiMaskResult>> pending;
+        synchronized (this) {
+            pending = requests.remove(image);
+            HelperClient client = clients.get();
+            if (client != null && image.serviceInstanceId().equals(instances.get()))
+                client.cancelSegmentation(image.imageId());
+        }
+        cancel(pending);
+    }
+
+    private static void cancel(Set<OperationPromise<AiMaskResult>> pending) {
         if (pending != null) for (var operation : pending) operation.cancel();
-        HelperClient client = clients.get();
-        if (client != null && image.serviceInstanceId().equals(instances.get()))
-            client.cancelSegmentation(image.imageId());
     }
 
     @Override

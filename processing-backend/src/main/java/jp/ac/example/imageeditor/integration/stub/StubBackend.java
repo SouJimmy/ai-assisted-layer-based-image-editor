@@ -130,9 +130,13 @@ public final class StubBackend
     }
 
     @Override
-    public synchronized void close() {
-        closed = true;
-        for (var item : active) item.promise.cancel();
-        pending.clear();
+    public void close() {
+        List<Pending<?>> cancelled;
+        synchronized (this) {
+            closed = true;
+            cancelled = List.copyOf(active);
+            pending.clear();
+        }
+        for (var item : cancelled) item.promise.cancel();
     }
 }

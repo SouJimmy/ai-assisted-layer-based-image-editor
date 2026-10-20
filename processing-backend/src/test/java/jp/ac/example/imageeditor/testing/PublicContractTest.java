@@ -327,6 +327,7 @@ class PublicContractTest {
                         dir.resolve("missing.json"),
                         dir.resolve("logs"));
         var manager = new jp.ac.example.imageeditor.integration.runtime.LocalServiceManager();
+        assertEquals(ErrorCode.INVALID_ARGUMENT, error(manager.restart()).code());
         assertEquals(
                 ErrorCode.SERVICE_UNAVAILABLE,
                 error(manager.aiService().registerImage(ContractTests.image(), "r")).code());
@@ -345,6 +346,7 @@ class PublicContractTest {
         assertEquals(ServiceState.CLOSED, manager.status().state());
         assertFalse(ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false));
         assertEquals(ErrorCode.SERVICE_UNAVAILABLE, error(manager.start(config)).code());
+        assertEquals(ErrorCode.SERVICE_UNAVAILABLE, error(manager.restart()).code());
         assertTrue(Files.exists(dir.resolve("logs/helper.log")));
     }
 }
